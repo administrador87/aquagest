@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { FileText, Plus, Zap, XCircle } from 'lucide-vue-next'
+import { FileText, MessageCircle, Plus, Zap, XCircle } from 'lucide-vue-next'
 import { useInvoicesStore } from '@/stores/invoices'
 import { useCustomersStore } from '@/stores/customers'
 import { useSettingsStore } from '@/stores/settings'
@@ -14,6 +14,7 @@ import { formatDate } from '@/utils/dateRange'
 import { formatCurrency } from '@/utils/currency'
 import { ESTADO_FATURA_LABEL, ESTADO_FATURA_TONE, estadoEfetivoFatura } from '@/utils/invoiceStatus'
 import { gerarPdfFatura, abrirPdfEmNovaAba } from '@/utils/pdf'
+import { abrirWhatsapp } from '@/utils/whatsapp'
 import { listarLeiturasPorFaturar } from '@/services/billing'
 import type { InvoiceStatus } from '@/types/models'
 
@@ -69,6 +70,22 @@ async function verPdf(faturaId: string) {
   if (!cliente) return
   const pdf = gerarPdfFatura(fatura, cliente, settings.dados)
   abrirPdfEmNovaAba(pdf)
+}
+
+function enviarWhatsapp(faturaId: string) {
+  const fatura = invoicesStore.porId(faturaId)
+  if (!fatura) return
+  const cliente = customersStore.porId(fatura.clienteId)
+  if (!cliente) return
+  if (!cliente.telefone) {
+    alert('Este cliente não tem número de telefone registado.')
+    return
+  }
+  // Abre o PDF (para o operador descarregar/guardar) e o WhatsApp com a mensagem já preenchida;
+  // o anexo do ficheiro na conversa é feito manualmente, já que não temos um link partilhável.
+  abrirPdfEmNovaAba(gerarPdfFatura(fatura, cliente, settings.dados))
+  const mensagem = `Olá ${cliente.nome}, segue a sua fatura ${fatura.numero} no valor de ${formatCurrency(fatura.total)}, com vencimento em ${formatDate(fatura.dataVencimento)}. Vou anexar o PDF de seguida.`
+  abrirWhatsapp(cliente.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
 }
 
 async function cancelar(faturaId: string) {
@@ -133,6 +150,13 @@ async function cancelar(faturaId: string) {
               <div class="flex justify-end gap-1">
                 <button class="rounded-md p-1.5 hover:bg-[hsl(var(--accent))]" title="Ver PDF" @click="verPdf(fatura.id)">
                   <FileText :size="16" />
+                </button>
+                <button
+                  class="rounded-md p-1.5 text-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/10"
+                  title="Enviar por WhatsApp"
+                  @click="enviarWhatsapp(fatura.id)"
+                >
+                  <MessageCircle :size="16" />
                 </button>
                 <button
                   v-if="pode('invoices', 'delete') && fatura.estado !== 'cancelada' && fatura.totalPago === 0"

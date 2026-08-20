@@ -27,6 +27,7 @@ export function configuracoesPorDefeito(): Omit<AppSettings, 'id'> {
     prefixoRecibo: 'REC',
     prefixoPedido: 'PED',
     diasVencimentoFatura: 15,
+    codigoPaisWhatsapp: '258',
     atualizadoEm: Date.now(),
   }
 }

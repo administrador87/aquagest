@@ -23,7 +23,9 @@ export const useSettingsStore = defineStore('settings', {
     async carregar() {
       const existentes = await obterConfiguracoes()
       if (existentes) {
-        this.dados = existentes
+        // Junta com os valores por defeito para preencher campos adicionados em versões
+        // mais recentes que ainda não existam num documento de configurações mais antigo.
+        this.dados = { ...configuracoesPorDefeito(), ...existentes }
       } else {
         this.dados = configuracoesPorDefeito()
         await guardarConfiguracoes(this.dados)

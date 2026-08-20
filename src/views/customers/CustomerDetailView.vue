@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Pencil, Plus, ImageOff, FileText, XCircle } from 'lucide-vue-next'
+import { ArrowLeft, Pencil, Plus, ImageOff, FileText, MessageCircle, XCircle } from 'lucide-vue-next'
 import { useCustomersStore } from '@/stores/customers'
 import { useMetersStore } from '@/stores/meters'
 import { useReadingsStore } from '@/stores/readings'
@@ -25,6 +25,7 @@ import { formatCurrency } from '@/utils/currency'
 import { cn } from '@/utils/cn'
 import { ESTADO_FATURA_LABEL, ESTADO_FATURA_TONE, estadoEfetivoFatura } from '@/utils/invoiceStatus'
 import { gerarPdfFatura, gerarPdfRecibo, abrirPdfEmNovaAba } from '@/utils/pdf'
+import { abrirWhatsapp } from '@/utils/whatsapp'
 import type { Meter, PaymentMethod } from '@/types/models'
 import type { RegistarLeituraParams } from '@/services/meterReadings'
 
@@ -103,6 +104,17 @@ function verPdfFatura(faturaId: string) {
   if (!fatura || !cliente.value) return
   abrirPdfEmNovaAba(gerarPdfFatura(fatura, cliente.value, settings.dados))
 }
+function enviarWhatsappFatura(faturaId: string) {
+  const fatura = faturasCliente.value.find((f) => f.id === faturaId)
+  if (!fatura || !cliente.value) return
+  if (!cliente.value.telefone) {
+    alert('Este cliente não tem número de telefone registado.')
+    return
+  }
+  abrirPdfEmNovaAba(gerarPdfFatura(fatura, cliente.value, settings.dados))
+  const mensagem = `Olá ${cliente.value.nome}, segue a sua fatura ${fatura.numero} no valor de ${formatCurrency(fatura.total)}, com vencimento em ${formatDate(fatura.dataVencimento)}. Vou anexar o PDF de seguida.`
+  abrirWhatsapp(cliente.value.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
+}
 async function cancelarFatura(faturaId: string) {
   if (!confirm('Cancelar esta fatura? O saldo do cliente será ajustado.')) return
   try {
@@ -133,6 +145,17 @@ function verPdfRecibo(reciboId: string) {
   const recibo = recibosCliente.value.find((r) => r.id === reciboId)
   if (!recibo || !cliente.value) return
   abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente.value, settings.dados))
+}
+function enviarWhatsappRecibo(reciboId: string) {
+  const recibo = recibosCliente.value.find((r) => r.id === reciboId)
+  if (!recibo || !cliente.value) return
+  if (!cliente.value.telefone) {
+    alert('Este cliente não tem número de telefone registado.')
+    return
+  }
+  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente.value, settings.dados))
+  const mensagem = `Olá ${cliente.value.nome}, obrigado pelo pagamento. Segue o recibo ${recibo.numero} no valor de ${formatCurrency(recibo.valorRecebido)}. Vou anexar o PDF de seguida.`
+  abrirWhatsapp(cliente.value.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
 }
 
 // Edição de dados do cliente
@@ -331,6 +354,13 @@ const ESTADO_TONE: Record<string, 'success' | 'muted' | 'destructive'> = {
               <div class="flex justify-end gap-1">
                 <button class="rounded-md p-1.5 hover:bg-[hsl(var(--accent))]" title="Ver PDF" @click="verPdfFatura(f.id)"><FileText :size="14" /></button>
                 <button
+                  class="rounded-md p-1.5 text-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/10"
+                  title="Enviar por WhatsApp"
+                  @click="enviarWhatsappFatura(f.id)"
+                >
+                  <MessageCircle :size="14" />
+                </button>
+                <button
                   v-if="pode('invoices', 'delete') && f.estado !== 'cancelada' && f.totalPago === 0"
                   class="rounded-md p-1.5 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]/10"
                   title="Cancelar"
@@ -395,7 +425,16 @@ const ESTADO_TONE: Record<string, 'success' | 'muted' | 'destructive'> = {
             <td class="py-2 text-right font-medium">{{ formatCurrency(r.valorRecebido) }}</td>
             <td class="py-2 text-right">{{ formatCurrency(r.saldoRestante) }}</td>
             <td class="py-2 text-right">
-              <button class="rounded-md p-1.5 hover:bg-[hsl(var(--accent))]" @click="verPdfRecibo(r.id)"><FileText :size="14" /></button>
+              <div class="flex justify-end gap-1">
+                <button class="rounded-md p-1.5 hover:bg-[hsl(var(--accent))]" title="Ver PDF" @click="verPdfRecibo(r.id)"><FileText :size="14" /></button>
+                <button
+                  class="rounded-md p-1.5 text-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/10"
+                  title="Enviar por WhatsApp"
+                  @click="enviarWhatsappRecibo(r.id)"
+                >
+                  <MessageCircle :size="14" />
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>

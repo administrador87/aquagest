@@ -20,6 +20,7 @@ const form = reactive({
   prefixoRecibo: '',
   prefixoPedido: '',
   diasVencimentoFatura: 15,
+  codigoPaisWhatsapp: '258',
 })
 
 function preencherDoStore() {
@@ -86,6 +87,17 @@ async function guardar() {
         <div>
           <Label for="moedaSimbolo">Símbolo</Label>
           <Input id="moedaSimbolo" v-model="form.moedaSimbolo" placeholder="MT" />
+        </div>
+      </div>
+
+      <h2 class="mb-4 mt-6 text-sm font-semibold">WhatsApp</h2>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <Label for="codigoPaisWhatsapp">Código do país (sem +)</Label>
+          <Input id="codigoPaisWhatsapp" v-model="form.codigoPaisWhatsapp" placeholder="258" />
+          <p class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+            Usado para completar os números de telefone dos clientes ao enviar faturas/recibos por WhatsApp.
+          </p>
         </div>
       </div>
 

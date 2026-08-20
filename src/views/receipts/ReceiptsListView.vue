@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import { FileText } from 'lucide-vue-next'
+import { FileText, MessageCircle } from 'lucide-vue-next'
 import { useReceiptsStore } from '@/stores/receipts'
 import { useCustomersStore } from '@/stores/customers'
 import { useSettingsStore } from '@/stores/settings'
 import { formatDate } from '@/utils/dateRange'
 import { formatCurrency } from '@/utils/currency'
 import { gerarPdfRecibo, abrirPdfEmNovaAba } from '@/utils/pdf'
+import { abrirWhatsapp } from '@/utils/whatsapp'
 import type { PaymentMethod } from '@/types/models'
 
 const receiptsStore = useReceiptsStore()
@@ -41,6 +42,20 @@ function verPdf(reciboId: string) {
   if (!cliente) return
   abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente, settings.dados))
 }
+
+function enviarWhatsapp(reciboId: string) {
+  const recibo = receiptsStore.ordenados.find((r) => r.id === reciboId)
+  if (!recibo) return
+  const cliente = customersStore.porId(recibo.clienteId)
+  if (!cliente) return
+  if (!cliente.telefone) {
+    alert('Este cliente não tem número de telefone registado.')
+    return
+  }
+  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente, settings.dados))
+  const mensagem = `Olá ${cliente.nome}, obrigado pelo pagamento. Segue o recibo ${recibo.numero} no valor de ${formatCurrency(recibo.valorRecebido)}. Vou anexar o PDF de seguida.`
+  abrirWhatsapp(cliente.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
+}
 </script>
 
 <template>
@@ -57,7 +72,7 @@ function verPdf(reciboId: string) {
             <th class="px-4 py-3 font-medium">Método</th>
             <th class="px-4 py-3 font-medium text-right">Valor</th>
             <th class="px-4 py-3 font-medium text-right">Saldo Restante</th>
-            <th class="px-4 py-3 font-medium text-right">PDF</th>
+            <th class="px-4 py-3 font-medium text-right">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -71,9 +86,18 @@ function verPdf(reciboId: string) {
               {{ formatCurrency(r.saldoRestante) }}
             </td>
             <td class="px-4 py-3 text-right">
-              <button class="rounded-md p-1.5 hover:bg-[hsl(var(--accent))]" @click="verPdf(r.id)">
-                <FileText :size="16" />
-              </button>
+              <div class="flex justify-end gap-1">
+                <button class="rounded-md p-1.5 hover:bg-[hsl(var(--accent))]" title="Ver PDF" @click="verPdf(r.id)">
+                  <FileText :size="16" />
+                </button>
+                <button
+                  class="rounded-md p-1.5 text-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/10"
+                  title="Enviar por WhatsApp"
+                  @click="enviarWhatsapp(r.id)"
+                >
+                  <MessageCircle :size="16" />
+                </button>
+              </div>
             </td>
           </tr>
           <tr v-if="!receiptsStore.carregando && receiptsStore.ordenados.length === 0">

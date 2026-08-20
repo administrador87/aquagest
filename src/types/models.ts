@@ -242,6 +242,7 @@ export interface AppSettings {
   prefixoRecibo: string
   prefixoPedido: string
   diasVencimentoFatura: number
+  codigoPaisWhatsapp: string
   atualizadoEm: number
 }
 
