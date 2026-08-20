@@ -1,0 +1,149 @@
+rules_version = '2';
+
+// AquaGest — regras de segurança do Firestore (v2 — revistas na Fase 3).
+//
+// Modelo: cada utilizador autenticado tem um documento em `users/{uid}` com um `papel`
+// (admin/gestor/tecnico/operador) e um estado `ativo`. As regras abaixo autorizam operações
+// consultando esse papel — ver função `temPapel()`.
+//
+// UM LIMITE DE CONFIANÇA CONHECIDO (aceitável para uma aplicação cliente-apenas sem Cloud
+// Functions; documentado aqui para quem for reforçar a segurança no futuro):
+//
+// Integridade de campos financeiros (`saldoAtual`, `totalPago`, `estado` de faturas, etc.):
+//    estes campos são calculados no cliente (em services/billing.ts e paymentsFlow.ts) e escritos
+//    com o mesmo papel que já tem permissão de "editar" o documento. As regras autorizam a
+//    operação pelo papel do utilizador, não validam o valor calculado em si. Para garantias mais
+//    fortes num ambiente de produção com dinheiro real, migre estas escritas para Cloud Functions
+//    invocadas via chamadas "callable", mantendo o cliente apenas com permissão de leitura nestes
+//    campos.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function utilizadorAtual() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function papel() {
+      return autenticado() ? utilizadorAtual().papel : null;
+    }
+
+    function ativo() {
+      return autenticado() && utilizadorAtual().ativo == true;
+    }
+
+    function temPapel(papeis) {
+      return autenticado() && ativo() && papel() in papeis;
+    }
+
+    // --- users ---------------------------------------------------------
+    // Bootstrap encerrado: o primeiro administrador já foi criado, por isso só um admin pode
+    // agora criar perfis de novos utilizadores (a partir do módulo Utilizadores da aplicação).
+    match /users/{uid} {
+      allow read: if autenticado();
+      allow create: if temPapel(['admin']);
+      allow update: if temPapel(['admin']) || (request.auth.uid == uid && request.resource.data.papel == resource.data.papel && request.resource.data.ativo == resource.data.ativo);
+      allow delete: if temPapel(['admin']);
+    }
+
+    // --- customers -------------------------------------------------------
+    match /customers/{id} {
+      allow read: if ativo();
+      allow create, update: if temPapel(['admin', 'gestor', 'operador']);
+      allow delete: if temPapel(['admin']);
+    }
+
+    // --- connections -------------------------------------------------------
+    match /connections/{id} {
+      // Leitura ampla a qualquer utilizador ativo: o Dashboard (acessível a todos os papéis)
+      // agrega dados destas coleções. O acesso aos módulos dedicados já é restringido na UI
+      // (menu e guarda de rotas) segundo src/config/permissions.ts; as escritas abaixo são
+      // sempre restritas por papel.
+      allow read: if ativo();
+      allow create, update: if temPapel(['admin', 'gestor', 'operador']);
+      allow delete: if temPapel(['admin']);
+    }
+
+    // --- meters -------------------------------------------------------
+    match /meters/{id} {
+      allow read: if ativo();
+      allow create, update: if temPapel(['admin', 'gestor', 'tecnico']);
+      allow delete: if temPapel(['admin']);
+    }
+
+    // --- meterReadings -------------------------------------------------------
+    match /meterReadings/{id} {
+      allow read: if ativo();
+      allow create: if temPapel(['admin', 'gestor', 'tecnico']);
+      // admin/gestor podem corrigir leituras; operador só precisa de marcar como faturada ao emitir fatura.
+      allow update: if temPapel(['admin', 'gestor', 'operador']);
+      allow delete: if temPapel(['admin']);
+    }
+
+    // --- tariffs -------------------------------------------------------
+    match /tariffs/{id} {
+      // Leitura ampla a qualquer utilizador ativo (ver nota sobre o Dashboard acima).
+      allow read: if ativo();
+      allow create, update, delete: if temPapel(['admin']);
+    }
+
+    // --- invoices -------------------------------------------------------
+    match /invoices/{id} {
+      // Leitura ampla a qualquer utilizador ativo (ver nota sobre o Dashboard acima).
+      allow read: if ativo();
+      allow create: if temPapel(['admin', 'gestor', 'operador']);
+      // operador atualiza totalPago/estado ao aplicar pagamentos; admin/gestor podem também cancelar.
+      allow update: if temPapel(['admin', 'gestor', 'operador']);
+      allow delete: if temPapel(['admin']);
+    }
+
+    // --- payments -------------------------------------------------------
+    match /payments/{id} {
+      // Leitura ampla a qualquer utilizador ativo (ver nota sobre o Dashboard acima).
+      allow read: if ativo();
+      allow create: if temPapel(['admin', 'gestor', 'operador']);
+      allow update, delete: if temPapel(['admin']);
+    }
+
+    // --- receipts -------------------------------------------------------
+    match /receipts/{id} {
+      // Leitura ampla a qualquer utilizador ativo (ver nota sobre o Dashboard acima).
+      allow read: if ativo();
+      allow create: if temPapel(['admin', 'gestor', 'operador']);
+      allow update, delete: if temPapel(['admin']);
+    }
+
+    // --- financialTransactions (livro-razão, só escrito pelos services de fatura/pagamento) ---
+    match /financialTransactions/{id} {
+      // Leitura ampla a qualquer utilizador ativo (ver nota sobre o Dashboard acima).
+      allow read: if ativo();
+      allow create: if temPapel(['admin', 'gestor', 'operador']);
+      allow update, delete: if false;
+    }
+
+    // --- auditLogs (só criação; nunca alterado ou apagado por ninguém) ---
+    match /auditLogs/{id} {
+      allow read: if temPapel(['admin', 'gestor']);
+      allow create: if ativo();
+      allow update, delete: if false;
+    }
+
+    // --- settings -------------------------------------------------------
+    match /settings/{id} {
+      allow read: if ativo();
+      // Criação inicial (valores por defeito) permitida a qualquer utilizador ativo caso ainda não exista;
+      // alterações a configurações já existentes requerem admin.
+      allow create: if ativo() && !exists(/databases/$(database)/documents/settings/$(id));
+      allow update, delete: if temPapel(['admin']);
+    }
+
+    // --- counters (numeração sequencial atómica) ---
+    match /counters/{id} {
+      allow read: if ativo();
+      allow write: if temPapel(['admin', 'gestor', 'operador']);
+    }
+  }
+}

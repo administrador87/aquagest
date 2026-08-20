@@ -1,0 +1,31 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependências
+node_modules
+dist
+dist-ssr
+*.local
+
+# Ambiente
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Firebase
+.firebase
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebaserc.local
+
+# SO
+.DS_Store
+Thumbs.db
