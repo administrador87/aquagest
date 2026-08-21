@@ -57,7 +57,13 @@ function submeter() {
   emit('submeter', {
     nome: form.nome,
     validoDesde: new Date(form.validoDesde).getTime(),
-    escaloes: escaloes.map((e) => ({ ...e, ateM3: e.ateM3 === null ? null : Number(e.ateM3) })),
+    escaloes: escaloes.map((e) => ({
+      ...e,
+      // O campo "Até" fica vazio (string '') quando o utilizador o limpa para indicar "sem
+      // limite superior" — sem este tratamento, v-model.number guardaria isso como 0 em vez de
+      // "sem limite", cortando silenciosamente a tarifa e sub-cobrando o consumo acima disso.
+      ateM3: e.ateM3 === null || e.ateM3 === ('' as unknown as number) ? null : Number(e.ateM3),
+    })),
     taxaFixa: Number(form.taxaFixa),
     taxaManutencao: Number(form.taxaManutencao),
     outrasTaxas: outrasTaxas.filter((t) => t.nome.trim()),

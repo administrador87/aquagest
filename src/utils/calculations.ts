@@ -30,6 +30,14 @@ export function calcularValorConsumoPorEscaloes(consumoM3: number, escaloes: Tar
     restante -= m3NesteEscalao
   }
 
+  // Os escalões configurados não cobrem a totalidade do consumo (ex: falta um escalão final
+  // "sem limite superior"). Nunca se deve emitir uma fatura a cobrar menos do que o consumo real.
+  if (restante > 0.001) {
+    throw new Error(
+      `A tarifa ativa não cobre a totalidade do consumo: faltam ${round2(restante)} m³ por tarifar. Verifique se o último escalão em Tarifas tem o campo "Até" vazio (sem limite superior).`,
+    )
+  }
+
   return round2(total)
 }
 
