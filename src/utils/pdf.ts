@@ -67,7 +67,12 @@ export function gerarPdfFatura(fatura: Invoice, cliente: Customer, empresa: Omit
   return docPdf
 }
 
-export function gerarPdfRecibo(recibo: Receipt, cliente: Customer, empresa: Omit<AppSettings, 'id'>): jsPDF {
+export function gerarPdfRecibo(
+  recibo: Receipt,
+  cliente: Customer,
+  empresa: Omit<AppSettings, 'id'>,
+  faturas: Invoice[] = [],
+): jsPDF {
   const docPdf = new jsPDF()
   cabecalho(docPdf, empresa, `Recibo ${recibo.numero}`)
 
@@ -78,10 +83,12 @@ export function gerarPdfRecibo(recibo: Receipt, cliente: Customer, empresa: Omit
   docPdf.text(`Forma de pagamento: ${METODO_LABEL[recibo.metodo] ?? recibo.metodo}`, 14, 42)
   docPdf.text(`Operador: ${recibo.operadorNome}`, 140, 42)
 
+  const numerosFatura = recibo.faturaIds.map((id) => faturas.find((f) => f.id === id)?.numero ?? id)
+
   autoTable(docPdf, {
     startY: 52,
     head: [['Fatura(s) associada(s)']],
-    body: recibo.faturaIds.length ? recibo.faturaIds.map((id) => [id]) : [['—']],
+    body: numerosFatura.length ? numerosFatura.map((numero) => [numero]) : [['—']],
     theme: 'grid',
     headStyles: { fillColor: [3, 105, 161] },
   })

@@ -153,7 +153,7 @@ async function submeterPagamento(dados: { clienteId: string; valor: number; meto
 function verPdfRecibo(reciboId: string) {
   const recibo = recibosCliente.value.find((r) => r.id === reciboId)
   if (!recibo || !cliente.value) return
-  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente.value, settings.dados))
+  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente.value, settings.dados, invoicesStore.itens))
 }
 function enviarWhatsappRecibo(reciboId: string) {
   const recibo = recibosCliente.value.find((r) => r.id === reciboId)
@@ -162,7 +162,7 @@ function enviarWhatsappRecibo(reciboId: string) {
     alert('Este cliente não tem número de telefone registado.')
     return
   }
-  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente.value, settings.dados))
+  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente.value, settings.dados, invoicesStore.itens))
   const mensagem = `Olá ${cliente.value.nome}, obrigado pelo pagamento. Segue o recibo ${recibo.numero} no valor de ${formatCurrency(recibo.valorRecebido)}. Vou anexar o PDF de seguida.`
   abrirWhatsapp(cliente.value.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
 }

@@ -3,6 +3,7 @@ import { onMounted, onUnmounted } from 'vue'
 import { FileText, MessageCircle } from 'lucide-vue-next'
 import { useReceiptsStore } from '@/stores/receipts'
 import { useCustomersStore } from '@/stores/customers'
+import { useInvoicesStore } from '@/stores/invoices'
 import { useSettingsStore } from '@/stores/settings'
 import { formatDate } from '@/utils/dateRange'
 import { formatCurrency } from '@/utils/currency'
@@ -12,15 +13,18 @@ import type { PaymentMethod } from '@/types/models'
 
 const receiptsStore = useReceiptsStore()
 const customersStore = useCustomersStore()
+const invoicesStore = useInvoicesStore()
 const settings = useSettingsStore()
 
 onMounted(() => {
   receiptsStore.ouvir()
   customersStore.ouvir()
+  invoicesStore.ouvir()
 })
 onUnmounted(() => {
   receiptsStore.pararDeOuvir()
   customersStore.pararDeOuvir()
+  invoicesStore.pararDeOuvir()
 })
 
 function nomeCliente(clienteId: string) {
@@ -40,7 +44,7 @@ function verPdf(reciboId: string) {
   if (!recibo) return
   const cliente = customersStore.porId(recibo.clienteId)
   if (!cliente) return
-  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente, settings.dados))
+  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente, settings.dados, invoicesStore.itens))
 }
 
 function enviarWhatsapp(reciboId: string) {
@@ -52,7 +56,7 @@ function enviarWhatsapp(reciboId: string) {
     alert('Este cliente não tem número de telefone registado.')
     return
   }
-  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente, settings.dados))
+  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente, settings.dados, invoicesStore.itens))
   const mensagem = `Olá ${cliente.nome}, obrigado pelo pagamento. Segue o recibo ${recibo.numero} no valor de ${formatCurrency(recibo.valorRecebido)}. Vou anexar o PDF de seguida.`
   abrirWhatsapp(cliente.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
 }
