@@ -63,6 +63,18 @@ export const useInvoicesStore = defineStore('invoices', {
       return cancelarFatura(faturaId, auth.contexto)
     },
 
+    /** Apaga definitivamente uma fatura já cancelada (sem pagamentos associados). Faturas
+     * ativas devem ser canceladas primeiro — nunca apagadas diretamente — para garantir que o
+     * saldo do cliente e o estado "por faturar" da leitura são corretamente revertidos. */
+    async apagar(faturaId: string) {
+      const fatura = this.porId(faturaId)
+      if (fatura && fatura.estado !== 'cancelada') {
+        throw new Error('Só é possível apagar faturas já canceladas.')
+      }
+      const auth = useAuthStore()
+      return invoicesService.remover(faturaId, auth.contexto, fatura)
+    },
+
     async leiturasPorFaturar(clienteId?: string) {
       return listarLeiturasPorFaturar(clienteId)
     },

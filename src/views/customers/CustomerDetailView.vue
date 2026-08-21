@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Pencil, Plus, ImageOff, FileText, MessageCircle, XCircle } from 'lucide-vue-next'
+import { ArrowLeft, Pencil, Plus, ImageOff, FileText, MessageCircle, Trash2, XCircle } from 'lucide-vue-next'
 import { useCustomersStore } from '@/stores/customers'
 import { useMetersStore } from '@/stores/meters'
 import { useReadingsStore } from '@/stores/readings'
@@ -121,6 +121,15 @@ async function cancelarFatura(faturaId: string) {
     await invoicesStore.cancelar(faturaId)
   } catch (e) {
     alert(e instanceof Error ? e.message : 'Não foi possível cancelar a fatura.')
+  }
+}
+
+async function apagarFatura(faturaId: string) {
+  if (!confirm('Apagar definitivamente esta fatura cancelada? Esta ação não pode ser revertida.')) return
+  try {
+    await invoicesStore.apagar(faturaId)
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Não foi possível apagar a fatura.')
   }
 }
 
@@ -367,6 +376,14 @@ const ESTADO_TONE: Record<string, 'success' | 'muted' | 'destructive'> = {
                   @click="cancelarFatura(f.id)"
                 >
                   <XCircle :size="14" />
+                </button>
+                <button
+                  v-if="pode('invoices', 'delete') && f.estado === 'cancelada'"
+                  class="rounded-md p-1.5 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]/10"
+                  title="Apagar definitivamente"
+                  @click="apagarFatura(f.id)"
+                >
+                  <Trash2 :size="14" />
                 </button>
               </div>
             </td>
