@@ -21,6 +21,7 @@ export const useTariffsStore = defineStore('tariffs', {
   getters: {
     ativa: (state) => state.itens.find((t) => t.ativa),
     historico: (state) => [...state.itens].sort((a, b) => b.validoDesde - a.validoDesde),
+    porId: (state) => (id: string) => state.itens.find((t) => t.id === id),
   },
 
   actions: {
@@ -45,6 +46,15 @@ export const useTariffsStore = defineStore('tariffs', {
     async criar(dados: Omit<Tariff, 'id' | 'criadoEm' | 'ativa' | 'validoAte'>) {
       const auth = useAuthStore()
       return criarNovaTarifa(dados, auth.contexto)
+    },
+
+    /** Apaga uma versão de tarifa do histórico. Nunca a ativa — faturas já emitidas mantêm o
+     * seu próprio snapshot da tarifa, por isso não são afetadas. */
+    async remover(id: string) {
+      const tarifa = this.porId(id)
+      if (tarifa?.ativa) throw new Error('Não é possível apagar a tarifa ativa.')
+      const auth = useAuthStore()
+      return tariffsService.remover(id, auth.contexto, tarifa)
     },
   },
 })

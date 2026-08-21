@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { Plus } from 'lucide-vue-next'
+import { Plus, Trash2 } from 'lucide-vue-next'
 import { useTariffsStore } from '@/stores/tariffs'
 import { usePermissions } from '@/composables/usePermissions'
 import Button from '@/components/ui/Button.vue'
@@ -30,6 +30,15 @@ async function submeter(dados: Omit<Tariff, 'id' | 'criadoEm' | 'ativa' | 'valid
     aGuardar.value = false
   }
 }
+
+async function remover(tarifa: Tariff) {
+  if (!confirm(`Apagar a tarifa "${tarifa.nome}" do histórico? Esta ação não pode ser revertida.`)) return
+  try {
+    await store.remover(tarifa.id)
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Não foi possível apagar a tarifa.')
+  }
+}
 </script>
 
 <template>
@@ -54,7 +63,17 @@ async function submeter(dados: Omit<Tariff, 'id' | 'criadoEm' | 'ativa' | 'valid
               Válida desde {{ formatDate(tarifa.validoDesde) }}{{ tarifa.validoAte ? ` até ${formatDate(tarifa.validoAte)}` : '' }}
             </p>
           </div>
-          <Badge :tone="tarifa.ativa ? 'success' : 'muted'">{{ tarifa.ativa ? 'Ativa' : 'Histórico' }}</Badge>
+          <div class="flex items-center gap-2">
+            <Badge :tone="tarifa.ativa ? 'success' : 'muted'">{{ tarifa.ativa ? 'Ativa' : 'Histórico' }}</Badge>
+            <button
+              v-if="pode('tariffs', 'delete') && !tarifa.ativa"
+              class="rounded-md p-1.5 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]/10"
+              title="Apagar do histórico"
+              @click="remover(tarifa)"
+            >
+              <Trash2 :size="14" />
+            </button>
+          </div>
         </div>
 
         <table class="w-full text-sm">
