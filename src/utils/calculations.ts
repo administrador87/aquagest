@@ -6,7 +6,9 @@ import type { InvoiceLine, Tariff, TariffBand } from '@/types/models'
  * chamadas de correção autorizada devem capturar o erro e definir `corrigida: true` explicitamente.
  */
 export function calcularConsumo(leituraAnterior: number, leituraAtual: number): number {
-  const consumo = leituraAtual - leituraAnterior
+  // round2 evita imprecisões de vírgula flutuante (ex: 1.7000000000000028) que a subtração
+  // direta de dois números decimais pode produzir em JavaScript.
+  const consumo = round2(leituraAtual - leituraAnterior)
   if (consumo < 0) {
     throw new Error(
       'A leitura atual não pode ser menor que a leitura anterior. Se o contador foi trocado ou há um erro anterior, utilize a correção de leitura.',
@@ -57,7 +59,7 @@ export function calcularFatura(
 
   const valorConsumo = calcularValorConsumoPorEscaloes(consumoM3, tarifa.escaloes)
   linhas.push({
-    descricao: `Consumo de água (${consumoM3} m³)`,
+    descricao: `Consumo de água (${round2(consumoM3)} m³)`,
     quantidade: consumoM3,
     valorUnitario: consumoM3 > 0 ? round2(valorConsumo / consumoM3) : 0,
     total: valorConsumo,
