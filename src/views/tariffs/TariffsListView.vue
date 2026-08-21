@@ -32,7 +32,10 @@ async function submeter(dados: Omit<Tariff, 'id' | 'criadoEm' | 'ativa' | 'valid
 }
 
 async function remover(tarifa: Tariff) {
-  if (!confirm(`Apagar a tarifa "${tarifa.nome}" do histórico? Esta ação não pode ser revertida.`)) return
+  const aviso = tarifa.ativa
+    ? `A tarifa "${tarifa.nome}" está ATIVA. Ao apagá-la, fica sem nenhuma tarifa configurada e não vai conseguir gerar faturas até criar uma nova versão. Continuar?`
+    : `Apagar a tarifa "${tarifa.nome}" do histórico? Esta ação não pode ser revertida.`
+  if (!confirm(aviso)) return
   try {
     await store.remover(tarifa.id)
   } catch (e) {
@@ -91,7 +94,7 @@ async function remover(tarifa: Tariff) {
         </Card>
 
         <button
-          v-if="pode('tariffs', 'delete') && !tarifa.ativa"
+          v-if="pode('tariffs', 'delete')"
           class="mt-1 rounded-md p-2 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]/10"
           title="Apagar do histórico"
           @click="remover(tarifa)"

@@ -48,11 +48,11 @@ export const useTariffsStore = defineStore('tariffs', {
       return criarNovaTarifa(dados, auth.contexto)
     },
 
-    /** Apaga uma versão de tarifa do histórico. Nunca a ativa — faturas já emitidas mantêm o
-     * seu próprio snapshot da tarifa, por isso não são afetadas. */
+    /** Apaga uma versão de tarifa (histórico ou ativa). Faturas já emitidas mantêm o seu próprio
+     * snapshot da tarifa aplicada, por isso não são afetadas. Se apagar a tarifa ativa, a
+     * faturação fica bloqueada até criar uma nova versão. */
     async remover(id: string) {
       const tarifa = this.porId(id)
-      if (tarifa?.ativa) throw new Error('Não é possível apagar a tarifa ativa.')
       const auth = useAuthStore()
       return tariffsService.remover(id, auth.contexto, tarifa)
     },
