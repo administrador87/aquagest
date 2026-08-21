@@ -1,14 +1,24 @@
 <script setup lang="ts">
 import { cn } from '@/utils/cn'
 
-defineProps<{ type?: string; placeholder?: string; disabled?: boolean }>()
+const props = defineProps<{ type?: string; placeholder?: string; disabled?: boolean }>()
 const model = defineModel<string | number | null>()
+
+// Campos numéricos usam type="text" + inputmode="decimal" em vez de type="number": o input
+// nativo type="number" só aceita "." como separador decimal e rejeita "," (comum em pt-PT/pt-MZ),
+// fazendo o campo parecer "não aceitar" o que a pessoa escreve. Mantemos o teclado numérico no
+// telemóvel via inputmode, e normalizamos "," para "." para o valor continuar a ser um número válido.
+function onInput(evento: Event) {
+  const alvo = evento.target as HTMLInputElement
+  model.value = props.type === 'number' ? alvo.value.replace(',', '.') : alvo.value
+}
 </script>
 
 <template>
   <input
-    v-model="model"
-    :type="type ?? 'text'"
+    :value="model ?? ''"
+    :type="type === 'number' ? 'text' : (type ?? 'text')"
+    :inputmode="type === 'number' ? 'decimal' : undefined"
     :placeholder="placeholder"
     :disabled="disabled"
     :class="
@@ -19,5 +29,6 @@ const model = defineModel<string | number | null>()
         'disabled:cursor-not-allowed disabled:opacity-50',
       )
     "
+    @input="onInput"
   />
 </template>
