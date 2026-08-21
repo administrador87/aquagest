@@ -2,8 +2,8 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "my-fisrt-app-dev",
-      "runtimeExecutable": "C:\\Users\\HP\\Desktop\\my-fisrt-app\\.claude\\run-dev.cmd",
+      "name": "aquagest-dev",
+      "runtimeExecutable": "C:\\Projetos\\aquagest\\.claude\\run-dev.cmd",
       "runtimeArgs": [],
       "port": 5173
     }
