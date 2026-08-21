@@ -106,7 +106,12 @@ function submeter() {
             <Label class="text-xs">Preço/m³</Label>
             <Input v-model.number="escalao.precoM3" type="number" min="0" step="0.01" />
           </div>
-          <button type="button" class="mb-2 rounded-md p-2 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]/10" @click="removerEscalao(i)">
+          <button
+            v-if="escaloes.length > 1"
+            type="button"
+            class="mb-2 rounded-md p-2 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]/10"
+            @click="removerEscalao(i)"
+          >
             <Trash2 :size="16" />
           </button>
         </div>
