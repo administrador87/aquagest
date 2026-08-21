@@ -243,6 +243,9 @@ export interface AppSettings {
   prefixoPedido: string
   diasVencimentoFatura: number
   codigoPaisWhatsapp: string
+  banco?: string
+  numeroConta?: string
+  nib?: string
   atualizadoEm: number
 }
 

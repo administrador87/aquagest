@@ -68,11 +68,11 @@ async function verPdf(faturaId: string) {
   if (!fatura) return
   const cliente = customersStore.porId(fatura.clienteId)
   if (!cliente) return
-  const pdf = gerarPdfFatura(fatura, cliente, settings.dados)
+  const pdf = await gerarPdfFatura(fatura, cliente, settings.dados, invoicesStore.itens)
   abrirPdfEmNovaAba(pdf)
 }
 
-function enviarWhatsapp(faturaId: string) {
+async function enviarWhatsapp(faturaId: string) {
   const fatura = invoicesStore.porId(faturaId)
   if (!fatura) return
   const cliente = customersStore.porId(fatura.clienteId)
@@ -83,7 +83,7 @@ function enviarWhatsapp(faturaId: string) {
   }
   // Abre o PDF (para o operador descarregar/guardar) e o WhatsApp com a mensagem já preenchida;
   // o anexo do ficheiro na conversa é feito manualmente, já que não temos um link partilhável.
-  abrirPdfEmNovaAba(gerarPdfFatura(fatura, cliente, settings.dados))
+  abrirPdfEmNovaAba(await gerarPdfFatura(fatura, cliente, settings.dados, invoicesStore.itens))
   const mensagem = `Olá ${cliente.nome}, segue a sua fatura ${fatura.numero} no valor de ${formatCurrency(fatura.total)}, com vencimento em ${formatDate(fatura.dataVencimento)}. Vou anexar o PDF de seguida.`
   abrirWhatsapp(cliente.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
 }

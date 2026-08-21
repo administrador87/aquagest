@@ -99,19 +99,19 @@ const dialogFaturaAberto = ref(false)
 function faturaGerada() {
   dialogFaturaAberto.value = false
 }
-function verPdfFatura(faturaId: string) {
+async function verPdfFatura(faturaId: string) {
   const fatura = faturasCliente.value.find((f) => f.id === faturaId)
   if (!fatura || !cliente.value) return
-  abrirPdfEmNovaAba(gerarPdfFatura(fatura, cliente.value, settings.dados))
+  abrirPdfEmNovaAba(await gerarPdfFatura(fatura, cliente.value, settings.dados, invoicesStore.itens))
 }
-function enviarWhatsappFatura(faturaId: string) {
+async function enviarWhatsappFatura(faturaId: string) {
   const fatura = faturasCliente.value.find((f) => f.id === faturaId)
   if (!fatura || !cliente.value) return
   if (!cliente.value.telefone) {
     alert('Este cliente não tem número de telefone registado.')
     return
   }
-  abrirPdfEmNovaAba(gerarPdfFatura(fatura, cliente.value, settings.dados))
+  abrirPdfEmNovaAba(await gerarPdfFatura(fatura, cliente.value, settings.dados, invoicesStore.itens))
   const mensagem = `Olá ${cliente.value.nome}, segue a sua fatura ${fatura.numero} no valor de ${formatCurrency(fatura.total)}, com vencimento em ${formatDate(fatura.dataVencimento)}. Vou anexar o PDF de seguida.`
   abrirWhatsapp(cliente.value.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
 }
@@ -150,19 +150,19 @@ async function submeterPagamento(dados: { clienteId: string; valor: number; meto
   }
 }
 
-function verPdfRecibo(reciboId: string) {
+async function verPdfRecibo(reciboId: string) {
   const recibo = recibosCliente.value.find((r) => r.id === reciboId)
   if (!recibo || !cliente.value) return
-  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente.value, settings.dados, invoicesStore.itens))
+  abrirPdfEmNovaAba(await gerarPdfRecibo(recibo, cliente.value, settings.dados, invoicesStore.itens))
 }
-function enviarWhatsappRecibo(reciboId: string) {
+async function enviarWhatsappRecibo(reciboId: string) {
   const recibo = recibosCliente.value.find((r) => r.id === reciboId)
   if (!recibo || !cliente.value) return
   if (!cliente.value.telefone) {
     alert('Este cliente não tem número de telefone registado.')
     return
   }
-  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente.value, settings.dados, invoicesStore.itens))
+  abrirPdfEmNovaAba(await gerarPdfRecibo(recibo, cliente.value, settings.dados, invoicesStore.itens))
   const mensagem = `Olá ${cliente.value.nome}, obrigado pelo pagamento. Segue o recibo ${recibo.numero} no valor de ${formatCurrency(recibo.valorRecebido)}. Vou anexar o PDF de seguida.`
   abrirWhatsapp(cliente.value.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
 }

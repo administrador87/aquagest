@@ -39,15 +39,15 @@ const METODO_LABEL: Record<PaymentMethod, string> = {
   outro: 'Outro',
 }
 
-function verPdf(reciboId: string) {
+async function verPdf(reciboId: string) {
   const recibo = receiptsStore.ordenados.find((r) => r.id === reciboId)
   if (!recibo) return
   const cliente = customersStore.porId(recibo.clienteId)
   if (!cliente) return
-  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente, settings.dados, invoicesStore.itens))
+  abrirPdfEmNovaAba(await gerarPdfRecibo(recibo, cliente, settings.dados, invoicesStore.itens))
 }
 
-function enviarWhatsapp(reciboId: string) {
+async function enviarWhatsapp(reciboId: string) {
   const recibo = receiptsStore.ordenados.find((r) => r.id === reciboId)
   if (!recibo) return
   const cliente = customersStore.porId(recibo.clienteId)
@@ -56,7 +56,7 @@ function enviarWhatsapp(reciboId: string) {
     alert('Este cliente não tem número de telefone registado.')
     return
   }
-  abrirPdfEmNovaAba(gerarPdfRecibo(recibo, cliente, settings.dados, invoicesStore.itens))
+  abrirPdfEmNovaAba(await gerarPdfRecibo(recibo, cliente, settings.dados, invoicesStore.itens))
   const mensagem = `Olá ${cliente.nome}, obrigado pelo pagamento. Segue o recibo ${recibo.numero} no valor de ${formatCurrency(recibo.valorRecebido)}. Vou anexar o PDF de seguida.`
   abrirWhatsapp(cliente.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
 }

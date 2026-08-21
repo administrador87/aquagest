@@ -21,6 +21,9 @@ const form = reactive({
   prefixoPedido: '',
   diasVencimentoFatura: 15,
   codigoPaisWhatsapp: '258',
+  banco: '',
+  numeroConta: '',
+  nib: '',
 })
 
 function preencherDoStore() {
@@ -98,6 +101,22 @@ async function guardar() {
           <p class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
             Usado para completar os números de telefone dos clientes ao enviar faturas/recibos por WhatsApp.
           </p>
+        </div>
+      </div>
+
+      <h2 class="mb-4 mt-6 text-sm font-semibold">Dados Bancários (aparecem na factura/recibo)</h2>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <Label for="banco">Banco</Label>
+          <Input id="banco" v-model="form.banco" placeholder="BCI - Banco Comercial e de Investimentos" />
+        </div>
+        <div>
+          <Label for="numeroConta">Número de Conta</Label>
+          <Input id="numeroConta" v-model="form.numeroConta" />
+        </div>
+        <div>
+          <Label for="nib">NIB</Label>
+          <Input id="nib" v-model="form.nib" />
         </div>
       </div>
 
