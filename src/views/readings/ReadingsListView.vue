@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Plus, Search, ImageOff } from 'lucide-vue-next'
+import { Plus, Search, ImageOff, Trash2 } from 'lucide-vue-next'
 import { useReadingsStore } from '@/stores/readings'
 import { useCustomersStore } from '@/stores/customers'
 import { useMetersStore } from '@/stores/meters'
@@ -64,6 +64,15 @@ async function submeter(dados: RegistarLeituraParams) {
     aGuardar.value = false
   }
 }
+
+async function apagar(leituraId: string) {
+  if (!confirm('Apagar esta leitura? Esta ação não pode ser revertida.')) return
+  try {
+    await readingsStore.remover(leituraId)
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Não foi possível apagar a leitura.')
+  }
+}
 </script>
 
 <template>
@@ -92,6 +101,7 @@ async function submeter(dados: RegistarLeituraParams) {
             <th class="px-4 py-3 font-medium text-right">Consumo</th>
             <th class="px-4 py-3 font-medium">Leitor</th>
             <th class="px-4 py-3 font-medium">Foto</th>
+            <th class="px-4 py-3 font-medium text-right">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -115,9 +125,19 @@ async function submeter(dados: RegistarLeituraParams) {
               />
               <ImageOff v-else :size="16" class="text-[hsl(var(--muted-foreground))]" />
             </td>
+            <td class="px-4 py-3 text-right">
+              <button
+                v-if="pode('readings', 'delete')"
+                class="rounded-md p-1.5 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]/10"
+                title="Apagar leitura"
+                @click="apagar(leitura.id)"
+              >
+                <Trash2 :size="16" />
+              </button>
+            </td>
           </tr>
           <tr v-if="!readingsStore.carregando && filtradas.length === 0">
-            <td colspan="8" class="px-4 py-12 text-center text-[hsl(var(--muted-foreground))]">Nenhuma leitura registada.</td>
+            <td colspan="9" class="px-4 py-12 text-center text-[hsl(var(--muted-foreground))]">Nenhuma leitura registada.</td>
           </tr>
         </tbody>
       </table>

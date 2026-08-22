@@ -44,6 +44,7 @@ const MATRIZ: Record<Module, Partial<Record<Action, UserRole[]>>> = {
     view: ['admin', 'gestor', 'tecnico', 'operador'],
     create: ['admin', 'gestor', 'tecnico'],
     correct: ['admin', 'gestor'],
+    delete: ['admin'],
   },
   tariffs: { view: ['admin', 'gestor', 'operador'], create: ['admin'], edit: ['admin'], delete: ['admin'] },
   invoices: {

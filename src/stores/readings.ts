@@ -50,5 +50,16 @@ export const useReadingsStore = defineStore('readings', {
       const auth = useAuthStore()
       return registarLeitura(params, auth.contexto)
     },
+
+    async remover(id: string) {
+      const auth = useAuthStore()
+      const leitura = this.itens.find((r) => r.id === id)
+      if (leitura?.faturada) {
+        throw new Error(
+          'Esta leitura já foi usada para gerar uma fatura e não pode ser apagada. Cancele primeiro a fatura correspondente.',
+        )
+      }
+      await meterReadingsService.remover(id, auth.contexto, leitura)
+    },
   },
 })

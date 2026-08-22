@@ -115,6 +115,15 @@ async function enviarWhatsappFatura(faturaId: string) {
   const mensagem = `Olá ${cliente.value.nome}, segue a sua fatura ${fatura.numero} no valor de ${formatCurrency(fatura.total)}, com vencimento em ${formatDate(fatura.dataVencimento)}. Vou anexar o PDF de seguida.`
   abrirWhatsapp(cliente.value.telefone, mensagem, settings.dados.codigoPaisWhatsapp)
 }
+async function apagarLeitura(leituraId: string) {
+  if (!confirm('Apagar esta leitura? Esta ação não pode ser revertida.')) return
+  try {
+    await readingsStore.remover(leituraId)
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Não foi possível apagar a leitura.')
+  }
+}
+
 async function cancelarFatura(faturaId: string) {
   if (!confirm('Cancelar esta fatura? O saldo do cliente será ajustado.')) return
   try {
@@ -313,6 +322,7 @@ const ESTADO_TONE: Record<string, 'success' | 'muted' | 'destructive'> = {
             <th class="py-2 font-medium text-right">Consumo</th>
             <th class="py-2 font-medium">Leitor</th>
             <th class="py-2 font-medium">Foto</th>
+            <th class="py-2 font-medium text-right">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -325,6 +335,16 @@ const ESTADO_TONE: Record<string, 'success' | 'muted' | 'destructive'> = {
             <td class="py-2">
               <img v-if="r.fotoUrl" :src="r.fotoUrl" class="h-7 w-7 rounded object-cover" />
               <ImageOff v-else :size="14" class="text-[hsl(var(--muted-foreground))]" />
+            </td>
+            <td class="py-2 text-right">
+              <button
+                v-if="pode('readings', 'delete')"
+                class="rounded-md p-1.5 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]/10"
+                title="Apagar leitura"
+                @click="apagarLeitura(r.id)"
+              >
+                <Trash2 :size="14" />
+              </button>
             </td>
           </tr>
         </tbody>
