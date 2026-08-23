@@ -1,5 +1,10 @@
 import { defineStore } from 'pinia'
-import { configuracoesPorDefeito, guardarConfiguracoes, obterConfiguracoes } from '@/services/settings'
+import {
+  configuracoesPorDefeito,
+  guardarConfiguracoes,
+  obterConfiguracoes,
+  sincronizarInfoPublicaPagamento,
+} from '@/services/settings'
 import type { AppSettings } from '@/types/models'
 
 interface SettingsState {
@@ -29,6 +34,9 @@ export const useSettingsStore = defineStore('settings', {
       } else {
         this.dados = configuracoesPorDefeito()
         await guardarConfiguracoes(this.dados)
+        // Só um admin tem permissão de escrita em publicPaymentInfo; noutros papéis este é o
+        // primeiro acesso à app antes de o admin ter configurado nada, por isso ignoramos o erro.
+        await sincronizarInfoPublicaPagamento(this.dados).catch(() => {})
       }
       this.carregado = true
     },
@@ -36,6 +44,7 @@ export const useSettingsStore = defineStore('settings', {
     async atualizar(dados: Partial<Omit<AppSettings, 'id'>>) {
       this.dados = { ...this.dados, ...dados }
       await guardarConfiguracoes(dados)
+      await sincronizarInfoPublicaPagamento(this.dados)
     },
   },
 })

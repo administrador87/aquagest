@@ -229,6 +229,13 @@ export interface AuditLog {
   timestamp: number
 }
 
+export interface MetodoPagamentoInfo {
+  ativo: boolean
+  numero?: string
+  /** Ícone carregado pelo utilizador, guardado como imagem embutida (data URL); vazio = usa o ícone por defeito. */
+  icone?: string
+}
+
 export interface AppSettings {
   id: string
   nomeEmpresa: string
@@ -246,6 +253,10 @@ export interface AppSettings {
   banco?: string
   numeroConta?: string
   nib?: string
+  metodoMpesa?: MetodoPagamentoInfo
+  metodoEmola?: MetodoPagamentoInfo
+  metodoTransferencia?: MetodoPagamentoInfo
+  metodoOutro?: MetodoPagamentoInfo
   atualizadoEm: number
 }
 

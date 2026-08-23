@@ -1,12 +1,27 @@
 <script setup lang="ts">
 import { onMounted, reactive, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
+import { redimensionarImagemParaIcone } from '@/utils/imageResize'
+import type { MetodoPagamentoInfo } from '@/types/models'
 import Card from '@/components/ui/Card.vue'
 import Input from '@/components/ui/Input.vue'
 import Label from '@/components/ui/Label.vue'
 import Button from '@/components/ui/Button.vue'
 
 const store = useSettingsStore()
+
+type ChaveMetodo = 'metodoMpesa' | 'metodoEmola' | 'metodoTransferencia' | 'metodoOutro'
+
+const METODOS_CONFIGURAVEIS: { chave: ChaveMetodo; label: string }[] = [
+  { chave: 'metodoMpesa', label: 'M-Pesa' },
+  { chave: 'metodoEmola', label: 'E-Mola' },
+  { chave: 'metodoTransferencia', label: 'Transferência Bancária' },
+  { chave: 'metodoOutro', label: 'Outro' },
+]
+
+function metodoVazio(): MetodoPagamentoInfo {
+  return { ativo: true, numero: '', icone: '' }
+}
 
 const form = reactive({
   nomeEmpresa: '',
@@ -24,10 +39,37 @@ const form = reactive({
   banco: '',
   numeroConta: '',
   nib: '',
+  metodoMpesa: metodoVazio(),
+  metodoEmola: metodoVazio(),
+  metodoTransferencia: metodoVazio(),
+  metodoOutro: metodoVazio(),
 })
+
+const erroIcone = reactive({ mensagem: '' })
+
+async function carregarIcone(chave: ChaveMetodo, evento: Event) {
+  const alvo = evento.target as HTMLInputElement
+  const ficheiro = alvo.files?.[0]
+  if (!ficheiro) return
+  erroIcone.mensagem = ''
+  try {
+    form[chave].icone = await redimensionarImagemParaIcone(ficheiro)
+  } catch (e) {
+    erroIcone.mensagem = e instanceof Error ? e.message : 'Não foi possível carregar a imagem.'
+  } finally {
+    alvo.value = ''
+  }
+}
+
+function removerIcone(chave: ChaveMetodo) {
+  form[chave].icone = ''
+}
 
 function preencherDoStore() {
   Object.assign(form, store.dados)
+  for (const { chave } of METODOS_CONFIGURAVEIS) {
+    if (!form[chave]) form[chave] = metodoVazio()
+  }
 }
 
 onMounted(async () => {
@@ -117,6 +159,47 @@ async function guardar() {
         <div>
           <Label for="nib">NIB</Label>
           <Input id="nib" v-model="form.nib" />
+        </div>
+      </div>
+
+      <h2 class="mb-1 mt-6 text-sm font-semibold">Métodos de Pagamento</h2>
+      <p class="mb-3 text-xs text-[hsl(var(--muted-foreground))]">
+        Desative um método para deixar de aparecer na factura/recibo (ex: se não usa "Outro"). O número/referência e o
+        ícone aparecem no documento e na página aberta pelo QR Code.
+      </p>
+      <p v-if="erroIcone.mensagem" class="mb-3 rounded-md bg-[hsl(var(--destructive))]/10 px-3 py-2 text-xs text-[hsl(var(--destructive))]">
+        {{ erroIcone.mensagem }}
+      </p>
+      <div class="space-y-3">
+        <div v-for="metodo in METODOS_CONFIGURAVEIS" :key="metodo.chave" class="rounded-md border border-[hsl(var(--border))] p-3">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <label class="flex items-center gap-2 text-sm font-medium">
+              <input v-model="form[metodo.chave].ativo" type="checkbox" class="h-4 w-4 rounded border-[hsl(var(--border))]" />
+              {{ metodo.label }}
+            </label>
+            <div class="flex items-center gap-2">
+              <img
+                v-if="form[metodo.chave].icone"
+                :src="form[metodo.chave].icone"
+                class="h-8 w-8 rounded-full border border-[hsl(var(--border))] object-cover"
+              />
+              <button
+                v-if="form[metodo.chave].icone"
+                type="button"
+                class="text-xs text-[hsl(var(--destructive))] hover:underline"
+                @click="removerIcone(metodo.chave)"
+              >
+                Remover ícone
+              </button>
+              <label class="cursor-pointer rounded-md border border-[hsl(var(--border))] px-2 py-1.5 text-xs hover:bg-[hsl(var(--accent))]">
+                Carregar ícone
+                <input type="file" accept="image/*" class="hidden" @change="carregarIcone(metodo.chave, $event)" />
+              </label>
+            </div>
+          </div>
+          <div class="mt-2 max-w-xs">
+            <Input v-model="form[metodo.chave].numero" placeholder="Número / referência (ex: 84 123 4567)" />
+          </div>
         </div>
       </div>
 

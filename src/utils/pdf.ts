@@ -4,7 +4,7 @@ import QRCode from 'qrcode'
 import { formatCurrency, formatNumber } from '@/utils/currency'
 import { formatDate } from '@/utils/dateRange'
 import { ESTADO_FATURA_LABEL, estadoEfetivoFatura } from '@/utils/invoiceStatus'
-import type { AppSettings, Customer, Invoice, Receipt } from '@/types/models'
+import type { AppSettings, Customer, Invoice, MetodoPagamentoInfo, Receipt } from '@/types/models'
 
 type Empresa = Omit<AppSettings, 'id'>
 
@@ -168,8 +168,11 @@ const ESTILOS = `
   .qr-img { width: 84px; height: 84px; }
   .codigo-cliente { font-size: 8.5px; color: #64748b; margin-top: 6px; }
   .metodos { display: flex; justify-content: space-around; padding: 10px 6px; flex-wrap: wrap; gap: 8px; }
-  .metodo { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 8.5px; color: #334155; }
-  .metodo-icone { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .metodo { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 8.5px; color: #334155; text-align: center; }
+  .metodo-icone { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; overflow: hidden; }
+  .metodo-icone img { width: 100%; height: 100%; object-fit: cover; }
+  .metodo-numero { font-size: 7.5px; color: #64748b; }
+  .aviso-legal { margin-top: 8px; padding-top: 8px; text-align: center; font-size: 9.5px; font-weight: 800; letter-spacing: 0.3px; color: #dc2626; }
   table.historico { width: 100%; border-collapse: collapse; font-size: 9.5px; }
   table.historico th { background: #0b3d6b; color: #fff; font-weight: 700; padding: 6px 8px; text-align: left; font-size: 8.5px; }
   table.historico td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
@@ -302,16 +305,38 @@ const ICONE_METODO: Record<string, string> = {
   outro: 'pontos',
 }
 
-function formasPagamentoHtml(): string {
+const CHAVE_CONFIG_METODO: Partial<Record<string, keyof Empresa>> = {
+  mpesa: 'metodoMpesa',
+  emola: 'metodoEmola',
+  transferencia: 'metodoTransferencia',
+  outro: 'metodoOutro',
+}
+
+function configDoMetodo(empresa: Empresa, chave: string): MetodoPagamentoInfo | undefined {
+  const chaveConfig = CHAVE_CONFIG_METODO[chave]
+  return chaveConfig ? (empresa[chaveConfig] as MetodoPagamentoInfo | undefined) : undefined
+}
+
+function formasPagamentoHtml(empresa: Empresa): string {
+  const metodos = Object.entries(METODO_LABEL).filter(([chave]) => configDoMetodo(empresa, chave)?.ativo !== false)
   return `
     <div class="box">
       <div class="box-title">FORMAS DE PAGAMENTO ACEITES</div>
       <div class="metodos">
-        ${Object.entries(METODO_LABEL)
-          .map(
-            ([chave, label]) =>
-              `<div class="metodo"><div class="metodo-icone" style="background:${CORES_METODO[chave]}">${icone(ICONE_METODO[chave], 14)}</div>${label}</div>`,
-          )
+        ${metodos
+          .map(([chave, label]) => {
+            const config = configDoMetodo(empresa, chave)
+            const iconeHtml = config?.icone
+              ? `<img src="${config.icone}" />`
+              : icone(ICONE_METODO[chave], 14)
+            return `
+              <div class="metodo">
+                <div class="metodo-icone" style="background:${CORES_METODO[chave]}">${iconeHtml}</div>
+                <span>${label}</span>
+                ${config?.numero ? `<span class="metodo-numero">${config.numero}</span>` : ''}
+              </div>
+            `
+          })
           .join('')}
       </div>
     </div>
@@ -382,6 +407,7 @@ function rodapeHtml(empresa: Empresa): string {
         <div style="margin-top:2px; font-weight:600; color:#334155;">${empresa.nomeEmpresa || ''}</div>
       </div>
     </div>
+    <div class="aviso-legal">DOCUMENTO EMITIDO APENAS PARA GESTÃO, NÃO SERVE PARA CONTABILIDADE E FISCO</div>
   `
 }
 
@@ -415,6 +441,12 @@ async function gerarQrDataUrl(texto: string): Promise<string> {
   return QRCode.toDataURL(texto, { margin: 1, width: 200, color: { dark: '#0b3d6b', light: '#ffffff' } })
 }
 
+/** Liga o QR Code à página pública de vias de pagamento (sem necessidade de login) — a pessoa
+ * que escaneia vê apenas os métodos de pagamento aceites, nunca dados internos da fatura. */
+function urlPaginaPagamento(referencia: string): string {
+  return `${window.location.origin}/pagar?ref=${encodeURIComponent(referencia)}`
+}
+
 function historicoDoCliente(clienteId: string, faturas: Invoice[], limite = 3): Invoice[] {
   return faturas
     .filter((f) => f.clienteId === clienteId && f.estado !== 'cancelada')
@@ -436,9 +468,7 @@ export async function gerarPdfFatura(
   const saldoDivida = Math.max(0, fatura.total - fatura.totalPago)
   const historico = historicoDoCliente(fatura.clienteId, faturas)
 
-  const qr = await gerarQrDataUrl(
-    `AQUAGEST|FACTURA|${fatura.numero}|CLIENTE:${cliente.codigo}|TOTAL:${fatura.total.toFixed(2)}`,
-  )
+  const qr = await gerarQrDataUrl(urlPaginaPagamento(fatura.numero))
 
   const html = `
     ${cabecalhoHtml(empresa, 'Factura', [
@@ -490,7 +520,7 @@ export async function gerarPdfFatura(
     </div>
 
     <div class="boxes-row2">
-      ${formasPagamentoHtml()}
+      ${formasPagamentoHtml(empresa)}
       ${dadosBancariosHtml(empresa)}
     </div>
 
@@ -519,9 +549,7 @@ export async function gerarPdfRecibo(
   const faturaPrincipal = faturas.find((f) => f.id === recibo.faturaIds[0])
   const saldoAnterior = recibo.saldoRestante + recibo.valorRecebido
 
-  const qr = await gerarQrDataUrl(
-    `AQUAGEST|RECIBO|${recibo.numero}|CLIENTE:${cliente.codigo}|VALOR:${recibo.valorRecebido.toFixed(2)}`,
-  )
+  const qr = await gerarQrDataUrl(urlPaginaPagamento(recibo.numero))
 
   const diasConsumo = faturaPrincipal
     ? Math.max(1, Math.round((faturaPrincipal.periodoFim - faturaPrincipal.periodoInicio) / (24 * 60 * 60 * 1000)))
@@ -582,7 +610,7 @@ export async function gerarPdfRecibo(
         <div class="box-title verde">PAGAMENTO REALIZADO</div>
         <div class="box-body">
           <div class="stat-icon" style="color:#16a34a;">${icone('check', 24)}</div>
-          <div class="qr-caption">Escaneie o QR Code para verificar este recibo.</div>
+          <div class="qr-caption">Escaneie o QR Code para consultar as nossas vias de pagamento.</div>
           <img class="qr-img" src="${qr}" />
           <div class="codigo-cliente">Código do Cliente: ${cliente.codigo}</div>
         </div>
@@ -590,7 +618,7 @@ export async function gerarPdfRecibo(
     </div>
 
     <div class="boxes-row2">
-      ${formasPagamentoHtml()}
+      ${formasPagamentoHtml(empresa)}
       ${dadosBancariosHtml(empresa)}
     </div>
 

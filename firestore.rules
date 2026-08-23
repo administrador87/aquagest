@@ -145,5 +145,15 @@ service cloud.firestore {
       allow read: if ativo();
       allow write: if temPapel(['admin', 'gestor', 'operador']);
     }
+
+    // --- publicPaymentInfo (página pública apontada pelo QR code das faturas/recibos) ---
+    // Contém apenas os métodos de pagamento aceites (nome da empresa, números, ícones, dados
+    // bancários) — os mesmos dados já impressos no documento em papel, nada sensível. Leitura
+    // aberta a qualquer pessoa (sem autenticação) para o QR funcionar; escrita só por admin,
+    // espelhada automaticamente a partir de `settings` sempre que este é guardado.
+    match /publicPaymentInfo/{id} {
+      allow read: if true;
+      allow write: if temPapel(['admin']);
+    }
   }
 }

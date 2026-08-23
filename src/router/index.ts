@@ -14,6 +14,12 @@ const router = createRouter({
       meta: { publico: true },
     },
     {
+      path: '/pagar',
+      name: 'pagar',
+      component: () => import('@/views/public/PublicPaymentView.vue'),
+      meta: { publico: true },
+    },
+    {
       path: '/',
       component: AppShell,
       children: [
