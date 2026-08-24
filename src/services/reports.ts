@@ -11,6 +11,7 @@ import { estadoEfetivoFatura, ESTADO_FATURA_LABEL } from '@/utils/invoiceStatus'
 import { formatDate } from '@/utils/dateRange'
 import { formatCurrency, formatNumber } from '@/utils/currency'
 import type { DateRange } from '@/utils/dateRange'
+import type { FinancialTransaction } from '@/types/models'
 
 export type ReportId =
   | 'faturacao_periodo'
@@ -185,7 +186,11 @@ export async function gerarRelatorio(
         invoicesService.listar(),
         receiptsService.listar(),
       ])
-      const numeroFatura = (origemId: string) => faturas.find((f) => f.id === origemId)?.numero ?? origemId
+      // Faturas apagadas (só possível já canceladas — ver invoicesStore.apagar) deixam de existir
+      // na coleção `invoices`, mas a descrição do movimento já guardou o número na altura ("Fatura
+      // FACT.-2026-000001"), por isso serve de reserva para não mostrar o ID interno do Firestore.
+      const numeroFatura = (t: FinancialTransaction) =>
+        faturas.find((f) => f.id === t.origemId)?.numero ?? t.descricao.replace(/^Fatura\s+/, '')
       const numeroRecibo = (pagamentoId: string) => recibos.find((r) => r.pagamentoId === pagamentoId)?.numero ?? '—'
       const ORIGEM_LABEL: Record<string, string> = { fatura: 'Factura', pagamento: 'Pagamento', ajuste: 'Ajuste' }
       const ordenadas = [...transacoes].sort((a, b) => a.data - b.data)
@@ -195,7 +200,7 @@ export async function gerarRelatorio(
         linhas: ordenadas.map((t) => [
           formatDate(t.data),
           ORIGEM_LABEL[t.origem] ?? t.origem,
-          t.origem === 'fatura' ? numeroFatura(t.origemId) : t.origem === 'pagamento' ? numeroRecibo(t.origemId) : '—',
+          t.origem === 'fatura' ? numeroFatura(t) : t.origem === 'pagamento' ? numeroRecibo(t.origemId) : '—',
           t.descricao,
           t.tipo === 'debito' ? formatCurrency(t.valor) : '',
           t.tipo === 'credito' ? formatCurrency(t.valor) : '',
