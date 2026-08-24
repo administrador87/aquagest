@@ -1,9 +1,11 @@
+import { where } from 'firebase/firestore'
 import { customersService } from '@/services/customers'
 import { connectionsService } from '@/services/connections'
 import { meterReadingsService } from '@/services/meterReadings'
 import { invoicesService } from '@/services/invoices'
 import { paymentsService } from '@/services/payments'
 import { receiptsService } from '@/services/receipts'
+import { financialTransactionsService } from '@/services/financialTransactions'
 import { obterContasAReceber } from '@/services/debts'
 import { estadoEfetivoFatura, ESTADO_FATURA_LABEL } from '@/utils/invoiceStatus'
 import { formatDate } from '@/utils/dateRange'
@@ -23,6 +25,7 @@ export type ReportId =
   | 'leituras_pendentes'
   | 'faturas_vencidas'
   | 'recibos_emitidos'
+  | 'extrato_conta_corrente'
 
 export interface ReportResult {
   titulo: string
@@ -38,7 +41,11 @@ const METODO_LABEL: Record<string, string> = {
   outro: 'Outro',
 }
 
-export async function gerarRelatorio(id: ReportId, periodo: DateRange): Promise<ReportResult> {
+export async function gerarRelatorio(
+  id: ReportId,
+  periodo: DateRange,
+  opcoes: { clienteId?: string } = {},
+): Promise<ReportResult> {
   switch (id) {
     case 'faturacao_periodo': {
       const faturas = (await invoicesService.listar()).filter((f) => f.dataEmissao >= periodo.inicio && f.dataEmissao <= periodo.fim)
@@ -168,10 +175,38 @@ export async function gerarRelatorio(id: ReportId, periodo: DateRange): Promise<
         linhas: recibos.map((r) => [r.numero, nome(r.clienteId), formatDate(r.data), formatCurrency(r.valorRecebido)]),
       }
     }
+    case 'extrato_conta_corrente': {
+      if (!opcoes.clienteId) {
+        return { titulo: 'Extrato de Conta Corrente', colunas: [], linhas: [] }
+      }
+      const [cliente, transacoes, faturas, recibos] = await Promise.all([
+        customersService.obter(opcoes.clienteId),
+        financialTransactionsService.listar(where('clienteId', '==', opcoes.clienteId)),
+        invoicesService.listar(),
+        receiptsService.listar(),
+      ])
+      const numeroFatura = (origemId: string) => faturas.find((f) => f.id === origemId)?.numero ?? origemId
+      const numeroRecibo = (pagamentoId: string) => recibos.find((r) => r.pagamentoId === pagamentoId)?.numero ?? '—'
+      const ORIGEM_LABEL: Record<string, string> = { fatura: 'Factura', pagamento: 'Pagamento', ajuste: 'Ajuste' }
+      const ordenadas = [...transacoes].sort((a, b) => a.data - b.data)
+      return {
+        titulo: `Extrato de Conta Corrente — ${cliente?.nome ?? '—'} (${cliente?.codigo ?? ''})`,
+        colunas: ['Data', 'Tipo', 'Documento', 'Descrição', 'Débito', 'Crédito', 'Saldo'],
+        linhas: ordenadas.map((t) => [
+          formatDate(t.data),
+          ORIGEM_LABEL[t.origem] ?? t.origem,
+          t.origem === 'fatura' ? numeroFatura(t.origemId) : t.origem === 'pagamento' ? numeroRecibo(t.origemId) : '—',
+          t.descricao,
+          t.tipo === 'debito' ? formatCurrency(t.valor) : '',
+          t.tipo === 'credito' ? formatCurrency(t.valor) : '',
+          formatCurrency(t.saldoAposMovimento),
+        ]),
+      }
+    }
   }
 }
 
-export const REPORTS: { id: ReportId; label: string; usaPeriodo: boolean }[] = [
+export const REPORTS: { id: ReportId; label: string; usaPeriodo: boolean; usaCliente?: boolean }[] = [
   { id: 'faturacao_periodo', label: 'Faturação por Período', usaPeriodo: true },
   { id: 'pagamentos_periodo', label: 'Pagamentos por Período', usaPeriodo: true },
   { id: 'dividas', label: 'Dívidas', usaPeriodo: false },
@@ -184,4 +219,5 @@ export const REPORTS: { id: ReportId; label: string; usaPeriodo: boolean }[] = [
   { id: 'leituras_pendentes', label: 'Leituras Pendentes', usaPeriodo: false },
   { id: 'faturas_vencidas', label: 'Faturas Vencidas', usaPeriodo: false },
   { id: 'recibos_emitidos', label: 'Recibos Emitidos', usaPeriodo: true },
+  { id: 'extrato_conta_corrente', label: 'Extrato de Conta Corrente', usaPeriodo: false, usaCliente: true },
 ]

@@ -1,23 +1,33 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { FileDown, FileSpreadsheet, BarChart3 } from 'lucide-vue-next'
 import { gerarRelatorio, REPORTS, type ReportId, type ReportResult } from '@/services/reports'
 import { exportarRelatorioExcel, exportarRelatorioPdf } from '@/utils/reportExport'
 import { getPeriodRange, type PeriodPreset } from '@/utils/dateRange'
+import { useCustomersStore } from '@/stores/customers'
 import Select from '@/components/ui/Select.vue'
 import Button from '@/components/ui/Button.vue'
 import Card from '@/components/ui/Card.vue'
 import PeriodFilter from '@/components/dashboard/PeriodFilter.vue'
 
+const customersStore = useCustomersStore()
+onMounted(() => customersStore.ouvir())
+onUnmounted(() => customersStore.pararDeOuvir())
+
 const relatorioId = ref<ReportId>('faturacao_periodo')
 const periodo = ref<PeriodPreset>('mes')
 const inicioPersonalizado = ref('')
 const fimPersonalizado = ref('')
+const clienteId = ref('')
 const resultado = ref<ReportResult | null>(null)
 const aGerar = ref(false)
 
 const opcoesRelatorios = computed(() => REPORTS.map((r) => ({ value: r.id, label: r.label })))
 const relatorioAtual = computed(() => REPORTS.find((r) => r.id === relatorioId.value)!)
+
+const opcoesClientes = computed(() =>
+  [...customersStore.itens].sort((a, b) => a.nome.localeCompare(b.nome)).map((c) => ({ value: c.id, label: `${c.nome} (${c.codigo})` })),
+)
 
 const intervalo = computed(() => {
   if (periodo.value === 'personalizado' && inicioPersonalizado.value && fimPersonalizado.value) {
@@ -29,10 +39,12 @@ const intervalo = computed(() => {
   return getPeriodRange(periodo.value === 'personalizado' ? 'ano' : periodo.value)
 })
 
+const podeGerar = computed(() => !relatorioAtual.value.usaCliente || !!clienteId.value)
+
 async function gerar() {
   aGerar.value = true
   try {
-    resultado.value = await gerarRelatorio(relatorioId.value, intervalo.value)
+    resultado.value = await gerarRelatorio(relatorioId.value, intervalo.value, { clienteId: clienteId.value || undefined })
   } finally {
     aGerar.value = false
   }
@@ -52,13 +64,18 @@ async function gerar() {
           </div>
         </div>
 
+        <div v-if="relatorioAtual.usaCliente" class="sm:max-w-sm">
+          <label class="mb-1 block text-sm font-medium">Cliente</label>
+          <Select v-model="clienteId" :options="[{ value: '', label: 'Selecione um cliente…' }, ...opcoesClientes]" />
+        </div>
+
         <div v-if="relatorioAtual.usaPeriodo">
           <label class="mb-1 block text-sm font-medium">Período</label>
           <PeriodFilter v-model="periodo" v-model:inicioPersonalizado="inicioPersonalizado" v-model:fimPersonalizado="fimPersonalizado" />
         </div>
 
         <div>
-          <Button :disabled="aGerar" @click="gerar">
+          <Button :disabled="aGerar || !podeGerar" @click="gerar">
             <BarChart3 :size="16" /> {{ aGerar ? 'A gerar…' : 'Gerar Relatório' }}
           </Button>
         </div>
