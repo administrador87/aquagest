@@ -3,15 +3,21 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { FileDown, FileSpreadsheet, BarChart3 } from 'lucide-vue-next'
 import { gerarRelatorio, REPORTS, type ReportId, type ReportResult } from '@/services/reports'
 import { exportarRelatorioExcel, exportarRelatorioPdf } from '@/utils/reportExport'
+import { gerarPdfExtrato, abrirPdfEmNovaAba } from '@/utils/pdf'
 import { getPeriodRange, type PeriodPreset } from '@/utils/dateRange'
 import { useCustomersStore } from '@/stores/customers'
+import { useSettingsStore } from '@/stores/settings'
 import Select from '@/components/ui/Select.vue'
 import Button from '@/components/ui/Button.vue'
 import Card from '@/components/ui/Card.vue'
 import PeriodFilter from '@/components/dashboard/PeriodFilter.vue'
 
 const customersStore = useCustomersStore()
-onMounted(() => customersStore.ouvir())
+const settingsStore = useSettingsStore()
+onMounted(() => {
+  customersStore.ouvir()
+  if (!settingsStore.carregado) settingsStore.carregar()
+})
 onUnmounted(() => customersStore.pararDeOuvir())
 
 const relatorioId = ref<ReportId>('faturacao_periodo')
@@ -48,6 +54,21 @@ async function gerar() {
   } finally {
     aGerar.value = false
   }
+}
+
+async function exportarPdf() {
+  if (!resultado.value) return
+  if (resultado.value.extratoContaCorrente) {
+    abrirPdfEmNovaAba(await gerarPdfExtrato(resultado.value.extratoContaCorrente, settingsStore.dados))
+  } else {
+    exportarRelatorioPdf(resultado.value)
+  }
+}
+
+/** No Extrato de Conta Corrente, "Saldo anterior" e "Total do Período" são linhas de resumo
+ * (identificáveis por não terem data) — destacadas a negrito na tabela em ecrã. */
+function ehLinhaResumo(linha: (string | number)[]) {
+  return resultado.value?.extratoContaCorrente !== undefined && linha[0] === ''
 }
 </script>
 
@@ -86,7 +107,7 @@ async function gerar() {
       <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="text-lg font-semibold">{{ resultado.titulo }}</h2>
         <div class="flex gap-2">
-          <Button variant="outline" size="sm" @click="exportarRelatorioPdf(resultado)">
+          <Button variant="outline" size="sm" @click="exportarPdf">
             <FileDown :size="14" /> PDF
           </Button>
           <Button variant="outline" size="sm" @click="exportarRelatorioExcel(resultado)">
@@ -104,7 +125,12 @@ async function gerar() {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(linha, i) in resultado.linhas" :key="i" class="border-b border-[hsl(var(--border))] last:border-0">
+            <tr
+              v-for="(linha, i) in resultado.linhas"
+              :key="i"
+              class="border-b border-[hsl(var(--border))] last:border-0"
+              :class="{ 'bg-[hsl(var(--muted))] font-semibold': ehLinhaResumo(linha) }"
+            >
               <td v-for="(valor, j) in linha" :key="j" class="whitespace-nowrap px-2 py-2">{{ valor }}</td>
             </tr>
           </tbody>

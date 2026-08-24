@@ -11,7 +11,7 @@ import { estadoEfetivoFatura, ESTADO_FATURA_LABEL } from '@/utils/invoiceStatus'
 import { formatDate } from '@/utils/dateRange'
 import { formatCurrency, formatNumber } from '@/utils/currency'
 import type { DateRange } from '@/utils/dateRange'
-import type { FinancialTransaction } from '@/types/models'
+import type { Customer, FinancialTransaction } from '@/types/models'
 
 export type ReportId =
   | 'faturacao_periodo'
@@ -32,6 +32,86 @@ export interface ReportResult {
   titulo: string
   colunas: string[]
   linhas: (string | number)[][]
+  /** Só presente para o relatório "Extrato de Conta Corrente" — dados estruturados usados pela
+   * exportação em PDF dedicada (formato de extracto de conta contabilístico). */
+  extratoContaCorrente?: ExtratoContaCorrente
+}
+
+export interface MovimentoExtrato {
+  data: number
+  descricao: string
+  debito: number
+  credito: number
+  saldo: number
+  tipoDoc: string
+  numeroDoc: string
+}
+
+export interface ExtratoContaCorrente {
+  cliente: Customer
+  periodoInicio: number
+  periodoFim: number
+  debitoAnterior: number
+  creditoAnterior: number
+  saldoAnterior: number
+  movimentos: MovimentoExtrato[]
+  totalDebitoPeriodo: number
+  totalCreditoPeriodo: number
+  saldoFinal: number
+}
+
+/** Sufixo D (Devedor — o cliente deve) / C (Credor — o cliente tem crédito), tal como num
+ * extracto de conta corrente contabilístico tradicional. */
+export function sufixoDC(valor: number): string {
+  if (valor > 0.005) return 'D'
+  if (valor < -0.005) return 'C'
+  return ''
+}
+
+/** Monta o extrato de conta corrente de um cliente para um período: saldo/débito/crédito
+ * acumulados antes do período (linha "Saldo anterior"), os movimentos dentro do período (faturas
+ * = débito, pagamentos = crédito) e os totais do período — a partir do livro-razão em
+ * `financialTransactions`, a mesma fonte usada na aba "Financeiro" do cliente. */
+export async function gerarExtratoContaCorrente(clienteId: string, periodo: DateRange): Promise<ExtratoContaCorrente | null> {
+  const [cliente, transacoes, faturas, recibos] = await Promise.all([
+    customersService.obter(clienteId),
+    financialTransactionsService.listar(where('clienteId', '==', clienteId)),
+    invoicesService.listar(),
+    receiptsService.listar(),
+  ])
+  if (!cliente) return null
+
+  // Faturas apagadas (só possível já canceladas — ver invoicesStore.apagar) deixam de existir na
+  // coleção `invoices`, mas a descrição do movimento já guardou o número na altura ("Fatura
+  // FACT.-2026-000001"), por isso serve de reserva para não mostrar o ID interno do Firestore.
+  const numeroFatura = (t: FinancialTransaction) =>
+    faturas.find((f) => f.id === t.origemId)?.numero ?? t.descricao.replace(/^Fatura\s+/, '')
+  const numeroRecibo = (pagamentoId: string) => recibos.find((r) => r.pagamentoId === pagamentoId)?.numero ?? '—'
+  const TIPO_DOC_LABEL: Record<string, string> = { fatura: 'Factura', pagamento: 'Recibo', ajuste: 'Ajuste' }
+
+  const ordenadas = [...transacoes].sort((a, b) => a.data - b.data)
+  const antes = ordenadas.filter((t) => t.data < periodo.inicio)
+  const noPeriodo = ordenadas.filter((t) => t.data >= periodo.inicio && t.data <= periodo.fim)
+
+  const debitoAnterior = antes.filter((t) => t.tipo === 'debito').reduce((soma, t) => soma + t.valor, 0)
+  const creditoAnterior = antes.filter((t) => t.tipo === 'credito').reduce((soma, t) => soma + t.valor, 0)
+  const saldoAnterior = antes.length ? antes[antes.length - 1].saldoAposMovimento : 0
+
+  const movimentos: MovimentoExtrato[] = noPeriodo.map((t) => ({
+    data: t.data,
+    descricao: t.descricao,
+    debito: t.tipo === 'debito' ? t.valor : 0,
+    credito: t.tipo === 'credito' ? t.valor : 0,
+    saldo: t.saldoAposMovimento,
+    tipoDoc: TIPO_DOC_LABEL[t.origem] ?? t.origem,
+    numeroDoc: t.origem === 'fatura' ? numeroFatura(t) : t.origem === 'pagamento' ? numeroRecibo(t.origemId) : '—',
+  }))
+
+  const totalDebitoPeriodo = movimentos.reduce((soma, m) => soma + m.debito, 0)
+  const totalCreditoPeriodo = movimentos.reduce((soma, m) => soma + m.credito, 0)
+  const saldoFinal = movimentos.length ? movimentos[movimentos.length - 1].saldo : saldoAnterior
+
+  return { cliente, periodoInicio: periodo.inicio, periodoFim: periodo.fim, debitoAnterior, creditoAnterior, saldoAnterior, movimentos, totalDebitoPeriodo, totalCreditoPeriodo, saldoFinal }
 }
 
 const METODO_LABEL: Record<string, string> = {
@@ -180,32 +260,28 @@ export async function gerarRelatorio(
       if (!opcoes.clienteId) {
         return { titulo: 'Extrato de Conta Corrente', colunas: [], linhas: [] }
       }
-      const [cliente, transacoes, faturas, recibos] = await Promise.all([
-        customersService.obter(opcoes.clienteId),
-        financialTransactionsService.listar(where('clienteId', '==', opcoes.clienteId)),
-        invoicesService.listar(),
-        receiptsService.listar(),
-      ])
-      // Faturas apagadas (só possível já canceladas — ver invoicesStore.apagar) deixam de existir
-      // na coleção `invoices`, mas a descrição do movimento já guardou o número na altura ("Fatura
-      // FACT.-2026-000001"), por isso serve de reserva para não mostrar o ID interno do Firestore.
-      const numeroFatura = (t: FinancialTransaction) =>
-        faturas.find((f) => f.id === t.origemId)?.numero ?? t.descricao.replace(/^Fatura\s+/, '')
-      const numeroRecibo = (pagamentoId: string) => recibos.find((r) => r.pagamentoId === pagamentoId)?.numero ?? '—'
-      const ORIGEM_LABEL: Record<string, string> = { fatura: 'Factura', pagamento: 'Pagamento', ajuste: 'Ajuste' }
-      const ordenadas = [...transacoes].sort((a, b) => a.data - b.data)
+      const extrato = await gerarExtratoContaCorrente(opcoes.clienteId, periodo)
+      if (!extrato) {
+        return { titulo: 'Extrato de Conta Corrente', colunas: [], linhas: [] }
+      }
+      const saldo = (v: number) => `${formatNumber(Math.abs(v))}${sufixoDC(v)}`
       return {
-        titulo: `Extrato de Conta Corrente — ${cliente?.nome ?? '—'} (${cliente?.codigo ?? ''})`,
-        colunas: ['Data', 'Tipo', 'Documento', 'Descrição', 'Débito', 'Crédito', 'Saldo'],
-        linhas: ordenadas.map((t) => [
-          formatDate(t.data),
-          ORIGEM_LABEL[t.origem] ?? t.origem,
-          t.origem === 'fatura' ? numeroFatura(t) : t.origem === 'pagamento' ? numeroRecibo(t.origemId) : '—',
-          t.descricao,
-          t.tipo === 'debito' ? formatCurrency(t.valor) : '',
-          t.tipo === 'credito' ? formatCurrency(t.valor) : '',
-          formatCurrency(t.saldoAposMovimento),
-        ]),
+        titulo: `Extracto de Conta ${extrato.cliente.codigo} (${formatDate(extrato.periodoInicio)} até ${formatDate(extrato.periodoFim)})`,
+        colunas: ['Data', 'Descrição', 'Débito', 'Crédito', 'Saldo', 'Doc.', 'N.º Doc.'],
+        linhas: [
+          ['', 'Saldo anterior', formatNumber(extrato.debitoAnterior), formatNumber(extrato.creditoAnterior), saldo(extrato.saldoAnterior), '', ''],
+          ...extrato.movimentos.map((m) => [
+            formatDate(m.data),
+            m.descricao,
+            m.debito ? formatNumber(m.debito) : '',
+            m.credito ? formatNumber(m.credito) : '',
+            saldo(m.saldo),
+            m.tipoDoc,
+            m.numeroDoc,
+          ]),
+          ['', 'Total do Período', formatNumber(extrato.totalDebitoPeriodo), formatNumber(extrato.totalCreditoPeriodo), saldo(extrato.saldoFinal), '', ''],
+        ],
+        extratoContaCorrente: extrato,
       }
     }
   }
@@ -224,5 +300,5 @@ export const REPORTS: { id: ReportId; label: string; usaPeriodo: boolean; usaCli
   { id: 'leituras_pendentes', label: 'Leituras Pendentes', usaPeriodo: false },
   { id: 'faturas_vencidas', label: 'Faturas Vencidas', usaPeriodo: false },
   { id: 'recibos_emitidos', label: 'Recibos Emitidos', usaPeriodo: true },
-  { id: 'extrato_conta_corrente', label: 'Extrato de Conta Corrente', usaPeriodo: false, usaCliente: true },
+  { id: 'extrato_conta_corrente', label: 'Extrato de Conta Corrente', usaPeriodo: true, usaCliente: true },
 ]

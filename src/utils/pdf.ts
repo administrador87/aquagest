@@ -4,6 +4,7 @@ import QRCode from 'qrcode'
 import { formatCurrency, formatNumber } from '@/utils/currency'
 import { formatDate } from '@/utils/dateRange'
 import { ESTADO_FATURA_LABEL, estadoEfetivoFatura } from '@/utils/invoiceStatus'
+import { sufixoDC, type ExtratoContaCorrente } from '@/services/reports'
 import type { AppSettings, Customer, Invoice, MetodoPagamentoInfo, Receipt } from '@/types/models'
 
 type Empresa = Omit<AppSettings, 'id'>
@@ -429,7 +430,12 @@ async function renderizarHtmlParaPdf(htmlConteudo: string): Promise<jsPDF> {
     const imagem = canvas.toDataURL('image/png')
     const larguraPdf = 210
     const alturaPdf = (canvas.height / canvas.width) * larguraPdf
-    const docPdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [larguraPdf, alturaPdf] })
+    // jsPDF troca largura/altura para respeitar a orientação pedida — se disséssemos sempre
+    // 'portrait' mas o conteúdo for mais largo que alto (páginas curtas, ex: extratos com poucos
+    // movimentos), o jsPDF inverteria as dimensões da página sem eu desenhar a imagem de novo,
+    // cortando-a. Escolher a orientação a partir da proporção real evita essa troca.
+    const orientacao = alturaPdf >= larguraPdf ? 'portrait' : 'landscape'
+    const docPdf = new jsPDF({ orientation: orientacao, unit: 'mm', format: [larguraPdf, alturaPdf] })
     docPdf.addImage(imagem, 'PNG', 0, 0, larguraPdf, alturaPdf)
     return docPdf
   } finally {
@@ -628,6 +634,116 @@ export async function gerarPdfRecibo(
   `
 
   return renderizarHtmlParaPdf(html)
+}
+
+// ---------------------------------------------------------------------------
+// Extrato de Conta Corrente — formato de extracto contabilístico (tabela simples
+// a preto e branco, ao estilo do exportado por programas de contabilidade), diferente
+// de propósito do design colorido das faturas/recibos.
+// ---------------------------------------------------------------------------
+
+const ESTILOS_EXTRATO = `
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .ex-doc { width: 800px; font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #000000; background: #ffffff; padding: 24px 28px; }
+  .ex-topo { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 700; padding-bottom: 6px; border-bottom: 1px solid #000; }
+  .ex-topo span:last-child { font-weight: 400; }
+  .ex-titulo-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 14px; }
+  .ex-titulo { font-size: 16px; font-weight: 700; }
+  .ex-moeda { font-size: 11px; }
+  .ex-data-contab { font-size: 10px; color: #555; margin-top: 4px; }
+  .ex-cliente { font-size: 12px; font-weight: 700; margin-top: 12px; margin-bottom: 6px; }
+  table.ex-tabela { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 10.5px; }
+  table.ex-tabela th { text-align: left; font-weight: 700; padding: 6px 8px; border-bottom: 1.5px solid #000; overflow-wrap: break-word; }
+  table.ex-tabela th.num, table.ex-tabela td.num { text-align: right; }
+  table.ex-tabela td { padding: 6px 8px; border-bottom: 1px solid #ccc; overflow-wrap: break-word; }
+  table.ex-tabela tr.ex-negrito td { font-weight: 700; }
+  table.ex-tabela tfoot td { font-weight: 700; border-top: 1.5px solid #000; border-bottom: none; padding-top: 8px; }
+`
+
+/** Constrói a linha "Saldo/valor" com o sufixo D (Devedor) ou C (Credor), tal como num
+ * extracto de conta corrente contabilístico tradicional. */
+function celulaSaldo(valor: number): string {
+  return `${formatNumber(Math.abs(valor))}${sufixoDC(valor)}`
+}
+
+export async function gerarPdfExtrato(extrato: ExtratoContaCorrente, empresa: Empresa): Promise<jsPDF> {
+  const html = `
+    <div class="ex-topo"><span>${(empresa.nomeEmpresa || 'Empresa de Águas').toUpperCase()}</span><span>Pág. 1/1</span></div>
+    <div class="ex-titulo-row">
+      <div class="ex-titulo">Extracto de Conta ${extrato.cliente.codigo} (${formatDate(extrato.periodoInicio)} até ${formatDate(extrato.periodoFim)})</div>
+      <div class="ex-moeda">Valores em ${empresa.moedaSimbolo || 'MT'}</div>
+    </div>
+    <div class="ex-data-contab">Data: ${formatDate(Date.now())}</div>
+    <div class="ex-cliente">${extrato.cliente.codigo} - ${extrato.cliente.nome.toUpperCase()}</div>
+    <table class="ex-tabela">
+      <colgroup>
+        <col style="width: 11%" /><col style="width: 27%" /><col style="width: 12%" />
+        <col style="width: 12%" /><col style="width: 13%" /><col style="width: 10%" /><col style="width: 15%" />
+      </colgroup>
+      <thead>
+        <tr><th>Data</th><th>Descrição</th><th class="num">Débito</th><th class="num">Crédito</th><th class="num">Saldo</th><th>Doc.</th><th>N.º Doc.</th></tr>
+      </thead>
+      <tbody>
+        <tr class="ex-negrito">
+          <td></td>
+          <td>Saldo anterior</td>
+          <td class="num">${formatNumber(extrato.debitoAnterior)}</td>
+          <td class="num">${formatNumber(extrato.creditoAnterior)}</td>
+          <td class="num">${celulaSaldo(extrato.saldoAnterior)}</td>
+          <td></td>
+          <td></td>
+        </tr>
+        ${extrato.movimentos
+          .map(
+            (m) => `
+          <tr>
+            <td>${formatDate(m.data)}</td>
+            <td>${m.descricao}</td>
+            <td class="num">${m.debito ? formatNumber(m.debito) : ''}</td>
+            <td class="num">${m.credito ? formatNumber(m.credito) : ''}</td>
+            <td class="num">${celulaSaldo(m.saldo)}</td>
+            <td>${m.tipoDoc}</td>
+            <td>${m.numeroDoc}</td>
+          </tr>`,
+          )
+          .join('')}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2">Total do Período</td>
+          <td class="num">${formatNumber(extrato.totalDebitoPeriodo)}</td>
+          <td class="num">${formatNumber(extrato.totalCreditoPeriodo)}</td>
+          <td class="num">${celulaSaldo(extrato.saldoFinal)}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  `
+
+  const container = document.createElement('div')
+  container.style.position = 'fixed'
+  container.style.left = '-9999px'
+  container.style.top = '0'
+  container.innerHTML = `<div class="ex-doc">${html}</div><style>${ESTILOS_EXTRATO}</style>`
+  document.body.appendChild(container)
+
+  try {
+    const alvo = container.querySelector('.ex-doc') as HTMLElement
+    const canvas = await html2canvas(alvo, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
+    const imagem = canvas.toDataURL('image/png')
+    const larguraPdf = 210
+    const alturaPdf = (canvas.height / canvas.width) * larguraPdf
+    // jsPDF troca largura/altura para respeitar a orientação pedida — se disséssemos sempre
+    // 'portrait' mas o conteúdo for mais largo que alto (páginas curtas, ex: extratos com poucos
+    // movimentos), o jsPDF inverteria as dimensões da página sem eu desenhar a imagem de novo,
+    // cortando-a. Escolher a orientação a partir da proporção real evita essa troca.
+    const orientacao = alturaPdf >= larguraPdf ? 'portrait' : 'landscape'
+    const docPdf = new jsPDF({ orientation: orientacao, unit: 'mm', format: [larguraPdf, alturaPdf] })
+    docPdf.addImage(imagem, 'PNG', 0, 0, larguraPdf, alturaPdf)
+    return docPdf
+  } finally {
+    document.body.removeChild(container)
+  }
 }
 
 export function abrirPdfEmNovaAba(docPdf: jsPDF) {
