@@ -8,6 +8,12 @@ export function porCliente(clienteId: string) {
   return where('clienteId', '==', clienteId)
 }
 
+/** Só encontra contadores 'fonte' criados depois deste campo existir — contadores 'cliente'
+ * antigos não têm o campo `tipo` gravado, mas nunca é isso que se procura aqui. */
+export function porTipo(tipo: 'cliente' | 'fonte') {
+  return where('tipo', '==', tipo)
+}
+
 interface AuthContext {
   uid: string
   nome: string

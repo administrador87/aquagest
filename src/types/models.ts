@@ -72,10 +72,19 @@ export interface Connection {
 
 export type MeterStatus = 'ativo' | 'substituido' | 'avariado' | 'removido'
 
+/** 'cliente' = contador normal, associado a um cliente e usado para faturação.
+ * 'fonte' = contador geral instalado à saída da fonte/reservatório, sem cliente associado —
+ * usado apenas para medir o volume total distribuído e reconciliar com o consumo faturado
+ * (deteção de perdas de água / água não faturada). Contadores antigos sem este campo são
+ * tratados como 'cliente' — ver `tipoContador()`. */
+export type MeterKind = 'cliente' | 'fonte'
+
 export interface Meter {
   id: string
   numero: string
-  clienteId: string
+  /** Só para contadores tipo 'cliente' — um contador 'fonte' não tem cliente associado. */
+  clienteId?: string
+  tipo?: MeterKind
   numeroSerie: string
   marca: string
   modelo: string
@@ -92,7 +101,8 @@ export interface Meter {
 
 export interface MeterReading {
   id: string
-  clienteId: string
+  /** Ausente quando a leitura é de um contador tipo 'fonte' (sem cliente associado). */
+  clienteId?: string
   contadorId: string
   data: number
   leituraAnterior: number

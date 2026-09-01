@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Plus, Search, Pencil, RefreshCcw } from 'lucide-vue-next'
+import { Plus, Search, Pencil, RefreshCcw, Droplets } from 'lucide-vue-next'
 import { useMetersStore } from '@/stores/meters'
 import { useCustomersStore } from '@/stores/customers'
 import { usePermissions } from '@/composables/usePermissions'
+import { tipoContador } from '@/utils/meterKind'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import Select from '@/components/ui/Select.vue'
@@ -22,6 +23,7 @@ const dialogAberto = ref(false)
 const contadorEmEdicao = ref<Meter | null>(null)
 const contadorATrocar = ref<Meter | null>(null)
 const clienteSelecionado = ref('')
+const eFonte = ref(false)
 const aGuardar = ref(false)
 
 onMounted(() => {
@@ -37,8 +39,13 @@ const opcoesClientes = computed(() =>
   customersStore.itens.map((c) => ({ value: c.id, label: `${c.codigo} — ${c.nome}` })),
 )
 
-function nomeCliente(clienteId: string) {
+function nomeCliente(clienteId?: string) {
+  if (!clienteId) return '—'
   return customersStore.porId(clienteId)?.nome ?? '—'
+}
+
+function clienteOuFonte(contador: Meter) {
+  return tipoContador(contador) === 'fonte' ? 'Fonte (geral)' : nomeCliente(contador.clienteId)
 }
 
 const filtrados = computed(() => {
@@ -48,7 +55,7 @@ const filtrados = computed(() => {
     (m) =>
       m.numero.toLowerCase().includes(termo) ||
       m.numeroSerie.toLowerCase().includes(termo) ||
-      nomeCliente(m.clienteId).toLowerCase().includes(termo),
+      clienteOuFonte(m).toLowerCase().includes(termo),
   )
 })
 
@@ -69,41 +76,56 @@ function abrirNovo() {
   contadorEmEdicao.value = null
   contadorATrocar.value = null
   clienteSelecionado.value = ''
+  eFonte.value = false
+  dialogAberto.value = true
+}
+
+function abrirNovaFonte() {
+  contadorEmEdicao.value = null
+  contadorATrocar.value = null
+  clienteSelecionado.value = ''
+  eFonte.value = true
   dialogAberto.value = true
 }
 
 function abrirEdicao(contador: Meter) {
   contadorEmEdicao.value = contador
   contadorATrocar.value = null
-  clienteSelecionado.value = contador.clienteId
+  clienteSelecionado.value = contador.clienteId ?? ''
+  eFonte.value = tipoContador(contador) === 'fonte'
   dialogAberto.value = true
 }
 
 function abrirTroca(contador: Meter) {
   contadorEmEdicao.value = null
   contadorATrocar.value = contador
-  clienteSelecionado.value = contador.clienteId
+  clienteSelecionado.value = contador.clienteId ?? ''
+  eFonte.value = tipoContador(contador) === 'fonte'
   dialogAberto.value = true
 }
 
 async function submeter(dados: Record<string, unknown>) {
-  if (!clienteSelecionado.value) {
+  if (!eFonte.value && !clienteSelecionado.value) {
     alert('Selecione o cliente do contador.')
     return
   }
   aGuardar.value = true
   try {
+    const clienteId = eFonte.value ? undefined : clienteSelecionado.value
+    const tipo = eFonte.value ? 'fonte' : 'cliente'
     if (contadorATrocar.value) {
       await metersStore.trocar(contadorATrocar.value.id, {
         ...(dados as Omit<Meter, 'id' | 'substitui' | 'substituidoPor' | 'estado' | 'criadoEm' | 'atualizadoEm'>),
-        clienteId: clienteSelecionado.value,
+        clienteId,
+        tipo,
       })
     } else if (contadorEmEdicao.value) {
-      await metersStore.atualizar(contadorEmEdicao.value.id, { ...dados, clienteId: clienteSelecionado.value })
+      await metersStore.atualizar(contadorEmEdicao.value.id, { ...dados, clienteId, tipo })
     } else {
       await metersStore.criar({
-        ...(dados as Omit<Meter, 'id' | 'clienteId' | 'criadoEm' | 'atualizadoEm'>),
-        clienteId: clienteSelecionado.value,
+        ...(dados as Omit<Meter, 'id' | 'clienteId' | 'tipo' | 'criadoEm' | 'atualizadoEm'>),
+        clienteId,
+        tipo,
       })
     }
     dialogAberto.value = false
@@ -117,9 +139,14 @@ async function submeter(dados: Record<string, unknown>) {
   <div>
     <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <h1 class="text-2xl font-bold text-[hsl(var(--foreground))]">Contadores</h1>
-      <Button v-if="pode('meters', 'create')" @click="abrirNovo">
-        <Plus :size="16" /> Novo Contador
-      </Button>
+      <div v-if="pode('meters', 'create')" class="flex flex-wrap gap-2">
+        <Button variant="outline" @click="abrirNovaFonte">
+          <Droplets :size="16" /> Novo Contador da Fonte
+        </Button>
+        <Button @click="abrirNovo">
+          <Plus :size="16" /> Novo Contador
+        </Button>
+      </div>
     </div>
 
     <div class="mb-4 relative max-w-sm">
@@ -142,7 +169,12 @@ async function submeter(dados: Record<string, unknown>) {
         <tbody>
           <tr v-for="contador in filtrados" :key="contador.id" class="border-b border-[hsl(var(--border))] last:border-0">
             <td class="px-4 py-3 font-medium">{{ contador.numero }}</td>
-            <td class="px-4 py-3">{{ nomeCliente(contador.clienteId) }}</td>
+            <td class="px-4 py-3">
+              <span v-if="tipoContador(contador) === 'fonte'" class="inline-flex items-center gap-1 text-sky-700">
+                <Droplets :size="14" /> Fonte (geral)
+              </span>
+              <span v-else>{{ nomeCliente(contador.clienteId) }}</span>
+            </td>
             <td class="px-4 py-3">{{ contador.marca }} {{ contador.modelo }}</td>
             <td class="px-4 py-3 text-[hsl(var(--muted-foreground))]">{{ formatDate(contador.dataInstalacao) }}</td>
             <td class="px-4 py-3"><Badge :tone="ESTADO_TONE[contador.estado]">{{ ESTADO_LABEL[contador.estado] }}</Badge></td>
@@ -176,9 +208,13 @@ async function submeter(dados: Record<string, unknown>) {
 
     <Dialog
       v-model:open="dialogAberto"
-      :title="contadorATrocar ? 'Trocar Contador' : contadorEmEdicao ? 'Editar Contador' : 'Novo Contador'"
+      :title="(contadorATrocar ? 'Trocar Contador' : contadorEmEdicao ? 'Editar Contador' : eFonte ? 'Novo Contador da Fonte' : 'Novo Contador')"
     >
-      <div class="mb-4">
+      <p v-if="eFonte" class="mb-4 text-xs text-[hsl(var(--muted-foreground))]">
+        Contador geral instalado à saída da fonte/reservatório, sem cliente associado — usado para medir o volume
+        total distribuído e comparar com o consumo faturado.
+      </p>
+      <div v-else class="mb-4">
         <label class="mb-1 block text-sm font-medium">Cliente</label>
         <Select v-model="clienteSelecionado" :options="opcoesClientes" placeholder="Selecione o cliente" :disabled="!!contadorATrocar" />
         <p v-if="contadorATrocar" class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">

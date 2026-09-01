@@ -35,13 +35,15 @@ function ultimosNMeses(n: number): string[] {
 }
 
 export async function obterEstatisticasDashboard(periodo: DateRange): Promise<DashboardStats> {
-  const [clientes, leituras, faturas, pagamentos, ligacoes] = await Promise.all([
+  const [clientes, leiturasTodas, faturas, pagamentos, ligacoes] = await Promise.all([
     customersService.listar(),
     meterReadingsService.listar(),
     invoicesService.listar(),
     paymentsService.listar(),
     connectionsService.listar(),
   ])
+  // Exclui leituras do contador da fonte (sem cliente associado) — não são consumo faturável.
+  const leituras = leiturasTodas.filter((r) => r.clienteId)
 
   const agora = new Date()
   const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1).getTime()

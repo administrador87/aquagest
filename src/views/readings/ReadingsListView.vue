@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Plus, Search, ImageOff, Trash2 } from 'lucide-vue-next'
+import { Plus, Search, ImageOff, Trash2, Droplets } from 'lucide-vue-next'
 import { useReadingsStore } from '@/stores/readings'
 import { useCustomersStore } from '@/stores/customers'
 import { useMetersStore } from '@/stores/meters'
@@ -20,6 +20,7 @@ const { pode } = usePermissions()
 
 const pesquisa = ref('')
 const dialogAberto = ref(false)
+const apenasFonte = ref(false)
 const aGuardar = ref(false)
 const erroSubmissao = ref('')
 const fotoAmpliada = ref<string | null>(null)
@@ -35,7 +36,8 @@ onUnmounted(() => {
   metersStore.pararDeOuvir()
 })
 
-function nomeCliente(clienteId: string) {
+function nomeCliente(clienteId?: string) {
+  if (!clienteId) return 'Fonte (geral)'
   return customersStore.porId(clienteId)?.nome ?? '—'
 }
 function numeroContador(contadorId: string) {
@@ -79,9 +81,14 @@ async function apagar(leituraId: string) {
   <div>
     <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <h1 class="text-2xl font-bold text-[hsl(var(--foreground))]">Leituras</h1>
-      <Button v-if="pode('readings', 'create')" @click="dialogAberto = true; erroSubmissao = ''">
-        <Plus :size="16" /> Nova Leitura
-      </Button>
+      <div v-if="pode('readings', 'create')" class="flex flex-wrap gap-2">
+        <Button variant="outline" @click="dialogAberto = true; apenasFonte = true; erroSubmissao = ''">
+          <Droplets :size="16" /> Leitura da Fonte
+        </Button>
+        <Button @click="dialogAberto = true; apenasFonte = false; erroSubmissao = ''">
+          <Plus :size="16" /> Nova Leitura
+        </Button>
+      </div>
     </div>
 
     <div class="mb-4 relative max-w-sm">
@@ -143,11 +150,11 @@ async function apagar(leituraId: string) {
       </table>
     </div>
 
-    <Dialog v-model:open="dialogAberto" title="Nova Leitura">
+    <Dialog v-model:open="dialogAberto" :title="apenasFonte ? 'Nova Leitura da Fonte' : 'Nova Leitura'">
       <p v-if="erroSubmissao" class="mb-3 rounded-md bg-[hsl(var(--destructive))]/10 px-3 py-2 text-sm text-[hsl(var(--destructive))]">
         {{ erroSubmissao }}
       </p>
-      <ReadingForm :a-guardar="aGuardar" @submeter="submeter" @cancelar="dialogAberto = false" />
+      <ReadingForm :apenas-fonte="apenasFonte" :a-guardar="aGuardar" @submeter="submeter" @cancelar="dialogAberto = false" />
     </Dialog>
 
     <div v-if="fotoAmpliada" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6" @click="fotoAmpliada = null">

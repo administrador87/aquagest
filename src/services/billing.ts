@@ -44,6 +44,7 @@ export async function gerarFaturaParaLeitura(
   const leitura = await meterReadingsService.obter(leituraId)
   if (!leitura) throw new Error('Leitura não encontrada.')
   if (leitura.faturada) throw new Error('Esta leitura já foi faturada.')
+  if (!leitura.clienteId) throw new Error('Esta leitura é do contador da fonte e não pode ser faturada.')
 
   const cliente = await customersService.obter(leitura.clienteId)
   if (!cliente) throw new Error('Cliente não encontrado.')
@@ -129,7 +130,10 @@ export async function listarLeiturasPorFaturar(clienteId?: string): Promise<Mete
   const constraints = clienteId
     ? [where('clienteId', '==', clienteId), where('faturada', '==', false)]
     : [where('faturada', '==', false)]
-  return meterReadingsService.listar(...constraints)
+  const leituras = await meterReadingsService.listar(...constraints)
+  // O contador da fonte (sem cliente associado) nunca é faturado — exclui as suas leituras da
+  // lista de candidatas, para não tentar gerar uma fatura sem cliente.
+  return leituras.filter((r) => r.clienteId)
 }
 
 export async function gerarFaturasEmMassa(

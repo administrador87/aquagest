@@ -2,6 +2,7 @@ import { where } from 'firebase/firestore'
 import { customersService } from '@/services/customers'
 import { connectionsService } from '@/services/connections'
 import { meterReadingsService } from '@/services/meterReadings'
+import { metersService } from '@/services/meters'
 import { invoicesService } from '@/services/invoices'
 import { paymentsService } from '@/services/payments'
 import { receiptsService } from '@/services/receipts'
@@ -10,6 +11,8 @@ import { obterContasAReceber } from '@/services/debts'
 import { estadoEfetivoFatura, ESTADO_FATURA_LABEL } from '@/utils/invoiceStatus'
 import { formatDate } from '@/utils/dateRange'
 import { formatCurrency, formatNumber } from '@/utils/currency'
+import { tipoContador } from '@/utils/meterKind'
+import { round2 } from '@/utils/calculations'
 import type { DateRange } from '@/utils/dateRange'
 import type { Customer, FinancialTransaction } from '@/types/models'
 
@@ -27,6 +30,7 @@ export type ReportId =
   | 'faturas_vencidas'
   | 'recibos_emitidos'
   | 'extrato_conta_corrente'
+  | 'reconciliacao_perdas'
 
 export interface ReportResult {
   titulo: string
@@ -157,10 +161,12 @@ export async function gerarRelatorio(
       }
     }
     case 'consumo_cliente': {
-      const leituras = (await meterReadingsService.listar()).filter((r) => r.data >= periodo.inicio && r.data <= periodo.fim)
+      // Exclui leituras do contador da fonte (sem clienteId) — ver relatório "Reconciliação de
+      // Perdas de Água" para essas.
+      const leituras = (await meterReadingsService.listar()).filter((r) => r.data >= periodo.inicio && r.data <= periodo.fim && r.clienteId)
       const clientes = await customersService.listar()
       const porCliente = new Map<string, number>()
-      for (const r of leituras) porCliente.set(r.clienteId, (porCliente.get(r.clienteId) ?? 0) + r.consumo)
+      for (const r of leituras) porCliente.set(r.clienteId!, (porCliente.get(r.clienteId!) ?? 0) + r.consumo)
       return {
         titulo: 'Consumo por Cliente',
         colunas: ['Cliente', 'Código', 'Consumo (m³)'],
@@ -173,7 +179,7 @@ export async function gerarRelatorio(
       }
     }
     case 'consumo_zona': {
-      const leituras = (await meterReadingsService.listar()).filter((r) => r.data >= periodo.inicio && r.data <= periodo.fim)
+      const leituras = (await meterReadingsService.listar()).filter((r) => r.data >= periodo.inicio && r.data <= periodo.fim && r.clienteId)
       const clientes = await customersService.listar()
       const porZona = new Map<string, number>()
       for (const r of leituras) {
@@ -187,7 +193,7 @@ export async function gerarRelatorio(
       }
     }
     case 'consumo_mensal': {
-      const leituras = (await meterReadingsService.listar()).filter((r) => r.data >= periodo.inicio && r.data <= periodo.fim)
+      const leituras = (await meterReadingsService.listar()).filter((r) => r.data >= periodo.inicio && r.data <= periodo.fim && r.clienteId)
       const porMes = new Map<string, number>()
       for (const r of leituras) {
         const d = new Date(r.data)
@@ -217,23 +223,24 @@ export async function gerarRelatorio(
       }
     }
     case 'leituras_realizadas': {
-      const leituras = (await meterReadingsService.listar()).filter((r) => r.data >= periodo.inicio && r.data <= periodo.fim)
+      const leituras = (await meterReadingsService.listar()).filter((r) => r.data >= periodo.inicio && r.data <= periodo.fim && r.clienteId)
       const clientes = await customersService.listar()
       const nome = (id: string) => clientes.find((c) => c.id === id)?.nome ?? '—'
       return {
         titulo: 'Leituras Realizadas',
         colunas: ['Data', 'Cliente', 'Consumo (m³)', 'Leitor'],
-        linhas: leituras.map((r) => [formatDate(r.data), nome(r.clienteId), formatNumber(r.consumo, 2), r.leitorNome]),
+        linhas: leituras.map((r) => [formatDate(r.data), nome(r.clienteId!), formatNumber(r.consumo, 2), r.leitorNome]),
       }
     }
     case 'leituras_pendentes': {
-      const leituras = (await meterReadingsService.listar()).filter((r) => !r.faturada)
+      // Leituras do contador da fonte nunca são faturadas — excluídas por não terem clienteId.
+      const leituras = (await meterReadingsService.listar()).filter((r) => !r.faturada && r.clienteId)
       const clientes = await customersService.listar()
       const nome = (id: string) => clientes.find((c) => c.id === id)?.nome ?? '—'
       return {
         titulo: 'Leituras Pendentes de Faturação',
         colunas: ['Data', 'Cliente', 'Consumo (m³)'],
-        linhas: leituras.map((r) => [formatDate(r.data), nome(r.clienteId), formatNumber(r.consumo, 2)]),
+        linhas: leituras.map((r) => [formatDate(r.data), nome(r.clienteId!), formatNumber(r.consumo, 2)]),
       }
     }
     case 'faturas_vencidas': {
@@ -284,6 +291,34 @@ export async function gerarRelatorio(
         extratoContaCorrente: extrato,
       }
     }
+    case 'reconciliacao_perdas': {
+      const [leituras, contadores] = await Promise.all([meterReadingsService.listar(), metersService.listar()])
+      const leiturasNoPeriodo = leituras.filter((r) => r.data >= periodo.inicio && r.data <= periodo.fim)
+      const idsFonte = new Set(contadores.filter((m) => tipoContador(m) === 'fonte').map((m) => m.id))
+
+      const totalFonte = round2(leiturasNoPeriodo.filter((r) => idsFonte.has(r.contadorId)).reduce((soma, r) => soma + r.consumo, 0))
+      const totalClientes = round2(leiturasNoPeriodo.filter((r) => r.clienteId).reduce((soma, r) => soma + r.consumo, 0))
+      const perdas = round2(totalFonte - totalClientes)
+      const percentagemPerdas = totalFonte > 0 ? round2((perdas / totalFonte) * 100) : 0
+
+      const linhas: (string | number)[][] = [
+        ['Total saído da fonte', `${formatNumber(totalFonte)} m³`],
+        ['Total consumido pelos clientes', `${formatNumber(totalClientes)} m³`],
+        ['Perdas de água (não faturada)', `${formatNumber(perdas)} m³`],
+        ['Percentagem de perdas', `${formatNumber(percentagemPerdas)}%`],
+      ]
+      if (idsFonte.size === 0) {
+        linhas.push(['Aviso', 'Não existe nenhum contador da fonte configurado — crie um em Contadores.'])
+      } else if (totalFonte === 0) {
+        linhas.push(['Aviso', 'Não há leituras do contador da fonte neste período.'])
+      }
+
+      return {
+        titulo: `Reconciliação de Perdas de Água (${formatDate(periodo.inicio)} a ${formatDate(periodo.fim)})`,
+        colunas: ['Indicador', 'Valor'],
+        linhas,
+      }
+    }
   }
 }
 
@@ -301,4 +336,5 @@ export const REPORTS: { id: ReportId; label: string; usaPeriodo: boolean; usaCli
   { id: 'faturas_vencidas', label: 'Faturas Vencidas', usaPeriodo: false },
   { id: 'recibos_emitidos', label: 'Recibos Emitidos', usaPeriodo: true },
   { id: 'extrato_conta_corrente', label: 'Extrato de Conta Corrente', usaPeriodo: true, usaCliente: true },
+  { id: 'reconciliacao_perdas', label: 'Reconciliação de Perdas de Água', usaPeriodo: true },
 ]

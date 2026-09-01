@@ -3,6 +3,7 @@ import type { Unsubscribe } from 'firebase/firestore'
 import { metersService, trocarContador } from '@/services/meters'
 import { useAuthStore } from '@/stores/auth'
 import { useSyncStore } from '@/stores/sync'
+import { tipoContador } from '@/utils/meterKind'
 import type { Meter } from '@/types/models'
 
 interface MetersState {
@@ -23,6 +24,7 @@ export const useMetersStore = defineStore('meters', {
     ativoPorCliente: (state) => (clienteId: string) =>
       state.itens.find((m) => m.clienteId === clienteId && m.estado === 'ativo'),
     porId: (state) => (id: string) => state.itens.find((m) => m.id === id),
+    contadoresDaFonte: (state) => state.itens.filter((m) => tipoContador(m) === 'fonte'),
   },
 
   actions: {

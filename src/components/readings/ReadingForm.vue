@@ -14,7 +14,7 @@ import Textarea from '@/components/ui/Textarea.vue'
 import Button from '@/components/ui/Button.vue'
 import type { RegistarLeituraParams } from '@/services/meterReadings'
 
-const props = defineProps<{ clienteIdFixo?: string; aGuardar: boolean }>()
+const props = defineProps<{ clienteIdFixo?: string; apenasFonte?: boolean; aGuardar: boolean }>()
 const emit = defineEmits<{ submeter: [dados: RegistarLeituraParams]; cancelar: [] }>()
 
 const customersStore = useCustomersStore()
@@ -39,7 +39,9 @@ const opcoesClientes = computed(() =>
 )
 
 const contadoresDoCliente = computed(() =>
-  metersStore.itens.filter((m) => m.clienteId === clienteId.value && m.estado === 'ativo'),
+  props.apenasFonte
+    ? metersStore.contadoresDaFonte.filter((m) => m.estado === 'ativo')
+    : metersStore.itens.filter((m) => m.clienteId === clienteId.value && m.estado === 'ativo'),
 )
 const opcoesContadores = computed(() =>
   contadoresDoCliente.value.map((m) => ({ value: m.id, label: `${m.numero} (${m.numeroSerie})` })),
@@ -52,6 +54,13 @@ watch(
   },
   { immediate: true },
 )
+
+if (props.apenasFonte) {
+  // Só há um contador da fonte (normalmente), pré-seleciona-o assim que a lista carregar.
+  watch(contadoresDoCliente, () => {
+    if (!contadorId.value) contadorId.value = contadoresDoCliente.value[0]?.id ?? ''
+  }, { immediate: true })
+}
 
 const contadorSelecionado = computed(() => metersStore.itens.find((m) => m.id === contadorId.value))
 const ultimaLeitura = computed(() => (contadorId.value ? readingsStore.ultimaPorContador(contadorId.value) : undefined))
@@ -75,12 +84,14 @@ async function onFoto(evento: Event) {
 
 function submeter() {
   erro.value = ''
-  if (!clienteId.value) {
+  if (!props.apenasFonte && !clienteId.value) {
     erro.value = 'Selecione o cliente.'
     return
   }
   if (!contadorId.value) {
-    erro.value = 'Este cliente não tem contador ativo. Registe um contador primeiro.'
+    erro.value = props.apenasFonte
+      ? 'Não existe nenhum contador da fonte ativo. Registe um em Contadores primeiro.'
+      : 'Este cliente não tem contador ativo. Registe um contador primeiro.'
     return
   }
   if (leituraInvalida.value && !corrigir.value) {
@@ -93,7 +104,7 @@ function submeter() {
   }
 
   emit('submeter', {
-    clienteId: clienteId.value,
+    clienteId: props.apenasFonte ? undefined : clienteId.value,
     contadorId: contadorId.value,
     data: new Date(dataLeitura.value).getTime(),
     leituraAnterior: leituraAnterior.value,
@@ -109,16 +120,25 @@ function submeter() {
 
 <template>
   <form class="flex flex-col gap-4" @submit.prevent="submeter">
-    <div v-if="!clienteIdFixo">
+    <div v-if="!clienteIdFixo && !apenasFonte">
       <Label for="cliente">Cliente</Label>
       <Select id="cliente" v-model="clienteId" :options="opcoesClientes" placeholder="Selecione o cliente" />
     </div>
 
     <div>
-      <Label for="contador">Contador</Label>
-      <Select id="contador" v-model="contadorId" :options="opcoesContadores" placeholder="Selecione o contador" :disabled="!clienteId" />
-      <p v-if="clienteId && opcoesContadores.length === 0" class="mt-1 text-xs text-[hsl(var(--warning))]">
+      <Label for="contador">Contador{{ apenasFonte ? ' da Fonte' : '' }}</Label>
+      <Select
+        id="contador"
+        v-model="contadorId"
+        :options="opcoesContadores"
+        placeholder="Selecione o contador"
+        :disabled="!apenasFonte && !clienteId"
+      />
+      <p v-if="!apenasFonte && clienteId && opcoesContadores.length === 0" class="mt-1 text-xs text-[hsl(var(--warning))]">
         Este cliente não tem contador ativo registado.
+      </p>
+      <p v-if="apenasFonte && opcoesContadores.length === 0" class="mt-1 text-xs text-[hsl(var(--warning))]">
+        Não existe nenhum contador da fonte ativo. Crie um em Contadores → "Novo Contador da Fonte".
       </p>
     </div>
 

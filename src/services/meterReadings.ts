@@ -28,7 +28,8 @@ interface AuthContext {
 }
 
 export interface RegistarLeituraParams {
-  clienteId: string
+  /** Ausente para leituras do contador da fonte (sem cliente associado). */
+  clienteId?: string
   contadorId: string
   data: number
   leituraAnterior: number
