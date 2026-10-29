@@ -187,6 +187,7 @@ const estilos = (corTexto: string) => `
   table.historico th { background: #0b3d6b; color: #fff; font-weight: 700; padding: 6px 8px; text-align: left; font-size: 8.5px; }
   table.historico td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
   table.historico td.num, table.historico th.num { text-align: right; }
+  table.historico tr.divida-total td { font-weight: 800; color: #dc2626; font-size: 10.5px; border-top: 1.5px solid #0b3d6b; border-bottom: none; }
   .avisos { list-style: none; padding: 8px 10px; }
   .avisos li { display: flex; gap: 6px; font-size: 8.5px; color: ${corTexto}; padding: 3px 0; align-items: flex-start; }
   .avisos svg { color: #0ea5e9; flex-shrink: 0; margin-top: 1px; }
@@ -462,6 +463,40 @@ function urlPaginaPagamento(referencia: string): string {
   return `${window.location.origin}/pagar?ref=${encodeURIComponent(referencia)}`
 }
 
+/** Mini-extrato com todas as facturas do cliente ainda por pagar (incluindo a actual), para o
+ * cliente ver de relance o que deve. Só aparece se houver pelo menos uma factura anterior em
+ * dívida — numa factura de um cliente em dia não acrescentaria nada. */
+function dividasEmAbertoHtml(fatura: Invoice, faturas: Invoice[]): string {
+  const emDivida = (f: Invoice) => f.total - f.totalPago > 0.005
+  const abertas = faturas
+    .filter((f) => f.clienteId === fatura.clienteId && !['paga', 'cancelada', 'rascunho'].includes(f.estado) && emDivida(f))
+    .sort((a, b) => a.dataVencimento - b.dataVencimento)
+  // A factura actual pode não estar na lista passada (ex: acabada de gerar) — garante que consta.
+  if (!abertas.some((f) => f.id === fatura.id) && emDivida(fatura)) abertas.push(fatura)
+  if (!abertas.some((f) => f.id !== fatura.id)) return ''
+
+  const hoje = Date.now()
+  const totalEmDivida = abertas.reduce((soma, f) => soma + (f.total - f.totalPago), 0)
+  return `
+    <div class="box" style="margin-top:10px;">
+      <div class="box-title">FACTURAS EM DÍVIDA</div>
+      <table class="historico">
+        <thead><tr><th>Factura</th><th>Período</th><th>Vencimento</th><th class="num">Valor (MT)</th><th class="num">Pago (MT)</th><th class="num">Em dívida (MT)</th><th>Atraso</th></tr></thead>
+        <tbody>
+          ${abertas
+            .map((f) => {
+              const diasAtraso = f.dataVencimento < hoje ? Math.floor((hoje - f.dataVencimento) / (24 * 60 * 60 * 1000)) : 0
+              const atual = f.id === fatura.id
+              return `<tr${atual ? ' style="font-weight:700;"' : ''}><td>${f.numero}${atual ? ' (esta)' : ''}</td><td>${formatDate(f.periodoInicio)} a ${formatDate(f.periodoFim)}</td><td>${formatDate(f.dataVencimento)}</td><td class="num">${formatCurrency(f.total)}</td><td class="num">${formatCurrency(f.totalPago)}</td><td class="num">${formatCurrency(f.total - f.totalPago)}</td><td>${diasAtraso > 0 ? `${diasAtraso} dias` : 'Em prazo'}</td></tr>`
+            })
+            .join('')}
+          <tr class="divida-total"><td colspan="5">TOTAL EM DÍVIDA</td><td class="num">${formatCurrency(totalEmDivida)}</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  `
+}
+
 function historicoDoCliente(clienteId: string, faturas: Invoice[], limite = 3): Invoice[] {
   return faturas
     .filter((f) => f.clienteId === clienteId && f.estado !== 'cancelada')
@@ -533,6 +568,8 @@ export async function gerarPdfFatura(
         </div>
       </div>
     </div>
+
+    ${dividasEmAbertoHtml(fatura, faturas)}
 
     <div class="boxes-row2">
       ${formasPagamentoHtml(empresa)}
