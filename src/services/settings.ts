@@ -53,6 +53,7 @@ export function configuracoesPorDefeito(): Omit<AppSettings, 'id'> {
     banco: '',
     numeroConta: '',
     nib: '',
+    corTextoDocumentos: '#1e293b',
     metodoMpesa: { ...METODO_VAZIO },
     metodoEmola: { ...METODO_VAZIO },
     metodoTransferencia: { ...METODO_VAZIO },

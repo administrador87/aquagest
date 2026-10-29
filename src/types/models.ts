@@ -263,6 +263,8 @@ export interface AppSettings {
   banco?: string
   numeroConta?: string
   nib?: string
+  /** Cor (hex, ex: #1e293b) do texto normal das facturas/recibos. */
+  corTextoDocumentos?: string
   metodoMpesa?: MetodoPagamentoInfo
   metodoEmola?: MetodoPagamentoInfo
   metodoTransferencia?: MetodoPagamentoInfo

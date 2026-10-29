@@ -39,6 +39,7 @@ const form = reactive({
   banco: '',
   numeroConta: '',
   nib: '',
+  corTextoDocumentos: '#1e293b',
   metodoMpesa: metodoVazio(),
   metodoEmola: metodoVazio(),
   metodoTransferencia: metodoVazio(),
@@ -201,6 +202,26 @@ async function guardar() {
             <Input v-model="form[metodo.chave].numero" placeholder="Número / referência (ex: 84 123 4567)" />
           </div>
         </div>
+      </div>
+
+      <h2 class="mb-1 mt-6 text-sm font-semibold">Aparência das Facturas e Recibos</h2>
+      <p class="mb-3 text-xs text-[hsl(var(--muted-foreground))]">
+        Cor do texto normal (nomes, valores, descrições). Aplica-se às facturas e recibos gerados a partir de agora.
+      </p>
+      <div class="flex items-center gap-3">
+        <input
+          id="corTextoDocumentos"
+          v-model="form.corTextoDocumentos"
+          type="color"
+          class="h-10 w-14 cursor-pointer rounded-md border border-[hsl(var(--border))] bg-white p-1"
+        />
+        <span class="text-sm" :style="{ color: form.corTextoDocumentos }">Exemplo: Joaquim Amade — 1131,00 MT</span>
+        <button type="button" class="text-xs text-[hsl(var(--muted-foreground))] hover:underline" @click="form.corTextoDocumentos = '#1e293b'">
+          Repor cor original
+        </button>
+        <button type="button" class="text-xs text-[hsl(var(--muted-foreground))] hover:underline" @click="form.corTextoDocumentos = '#000000'">
+          Preto
+        </button>
       </div>
 
       <h2 class="mb-4 mt-6 text-sm font-semibold">Numeração e Faturação</h2>

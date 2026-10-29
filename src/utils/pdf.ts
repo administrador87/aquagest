@@ -115,9 +115,18 @@ function logotipoSvg(tamanho = 64): string {
 // Blocos HTML reutilizáveis
 // ---------------------------------------------------------------------------
 
-const ESTILOS = `
+const COR_TEXTO_PADRAO = '#1e293b'
+
+/** Cor do texto normal dos documentos (configurável em Configurações); valida o formato para
+ * nunca injetar texto arbitrário no CSS. */
+function corTextoDe(empresa: Pick<Empresa, 'corTextoDocumentos'>): string {
+  const cor = empresa.corTextoDocumentos ?? ''
+  return /^#[0-9a-fA-F]{6}$/.test(cor) ? cor : COR_TEXTO_PADRAO
+}
+
+const estilos = (corTexto: string) => `
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  .doc { width: 800px; font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1e293b; background: #ffffff; padding: 28px 32px 20px; }
+  .doc { width: 800px; font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: ${corTexto}; background: #ffffff; padding: 28px 32px 20px; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
   .header-left { display: flex; gap: 12px; }
   .brand-nome { font-size: 24px; font-weight: 800; color: #0b3d6b; letter-spacing: 0.3px; }
@@ -129,10 +138,10 @@ const ESTILOS = `
   .info-box { margin-top: 8px; border: 1px solid #cbd5e1; border-radius: 4px; width: 100%; padding: 8px 12px; }
   .info-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 10.5px; }
   .info-label { color: #64748b; }
-  .info-val { font-weight: 700; color: #1e293b; }
+  .info-val { font-weight: 700; color: ${corTexto}; }
   .info-val-accent { color: #dc2626; }
   .contactos { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: 14px; padding: 8px 0; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; }
-  .contacto-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #334155; }
+  .contacto-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: ${corTexto}; }
   .contacto-item svg { color: #0ea5e9; flex-shrink: 0; }
   .boxes-row { display: flex; gap: 10px; margin-top: 16px; }
   .boxes-row2 { display: flex; gap: 10px; margin-top: 10px; }
@@ -141,7 +150,7 @@ const ESTILOS = `
   .box-title { background: #0b3d6b; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-align: center; padding: 6px; }
   .box-title.verde { background: #16a34a; }
   .box-body { padding: 10px 12px; flex: 1; }
-  .campo { display: flex; align-items: center; gap: 7px; font-size: 10.5px; padding: 4px 0; color: #334155; }
+  .campo { display: flex; align-items: center; gap: 7px; font-size: 10.5px; padding: 4px 0; color: ${corTexto}; }
   .campo svg { color: #0ea5e9; flex-shrink: 0; }
   .campo b { color: #64748b; font-weight: 600; margin-right: 3px; }
   .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; }
@@ -155,7 +164,7 @@ const ESTILOS = `
   table.itens th.num, table.itens td.num { text-align: right; }
   table.itens td { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; }
   table.itens tr:nth-child(even) td { background: #f8fafc; }
-  .linha-label { display: flex; justify-content: space-between; font-size: 10.5px; padding: 4px 0; color: #334155; }
+  .linha-label { display: flex; justify-content: space-between; font-size: 10.5px; padding: 4px 0; color: ${corTexto}; }
   .linha-label.total { border-top: 1px solid #cbd5e1; margin-top: 4px; padding-top: 7px; font-weight: 800; color: #0b3d6b; font-size: 12.5px; }
   .valor-grande { font-size: 20px; font-weight: 800; color: #16a34a; text-align: center; margin: 4px 0 2px; }
   .extenso { font-size: 9px; color: #64748b; text-align: center; font-style: italic; margin-bottom: 8px; }
@@ -169,7 +178,7 @@ const ESTILOS = `
   .qr-img { width: 84px; height: 84px; }
   .codigo-cliente { font-size: 8.5px; color: #64748b; margin-top: 6px; }
   .metodos { display: flex; justify-content: space-around; padding: 10px 6px; flex-wrap: wrap; gap: 8px; }
-  .metodo { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 8.5px; color: #334155; text-align: center; }
+  .metodo { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 8.5px; color: ${corTexto}; text-align: center; }
   .metodo-icone { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; overflow: hidden; }
   .metodo-icone img { width: 100%; height: 100%; object-fit: cover; }
   .metodo-numero { font-size: 7.5px; color: #64748b; }
@@ -179,7 +188,7 @@ const ESTILOS = `
   table.historico td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
   table.historico td.num, table.historico th.num { text-align: right; }
   .avisos { list-style: none; padding: 8px 10px; }
-  .avisos li { display: flex; gap: 6px; font-size: 8.5px; color: #334155; padding: 3px 0; align-items: flex-start; }
+  .avisos li { display: flex; gap: 6px; font-size: 8.5px; color: ${corTexto}; padding: 3px 0; align-items: flex-start; }
   .avisos svg { color: #0ea5e9; flex-shrink: 0; margin-top: 1px; }
   .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 14px; border-top: 2px solid #0b3d6b; gap: 12px; }
   .footer-left { display: flex; align-items: center; gap: 8px; }
@@ -405,7 +414,7 @@ function rodapeHtml(empresa: Empresa): string {
       <div class="footer-assinatura">
         <span class="linha"></span>
         Emitido por / Assinatura e Carimbo
-        <div style="margin-top:2px; font-weight:600; color:#334155;">${empresa.nomeEmpresa || ''}</div>
+        <div style="margin-top:2px; font-weight:600; color:${corTextoDe(empresa)};">${empresa.nomeEmpresa || ''}</div>
       </div>
     </div>
     <div class="aviso-legal">DOCUMENTO EMITIDO APENAS PARA GESTÃO, NÃO SERVE PARA CONTABILIDADE E FISCO</div>
@@ -416,12 +425,12 @@ function rodapeHtml(empresa: Empresa): string {
 // Renderização HTML -> PDF (via html2canvas), para fidelidade visual total
 // ---------------------------------------------------------------------------
 
-async function renderizarHtmlParaPdf(htmlConteudo: string): Promise<jsPDF> {
+async function renderizarHtmlParaPdf(htmlConteudo: string, corTexto: string): Promise<jsPDF> {
   const container = document.createElement('div')
   container.style.position = 'fixed'
   container.style.left = '-9999px'
   container.style.top = '0'
-  container.innerHTML = `<div class="doc">${htmlConteudo}</div><style>${ESTILOS}</style>`
+  container.innerHTML = `<div class="doc">${htmlConteudo}</div><style>${estilos(corTexto)}</style>`
   document.body.appendChild(container)
 
   try {
@@ -538,7 +547,7 @@ export async function gerarPdfFatura(
     ${rodapeHtml(empresa)}
   `
 
-  return renderizarHtmlParaPdf(html)
+  return renderizarHtmlParaPdf(html, corTextoDe(empresa))
 }
 
 // ---------------------------------------------------------------------------
@@ -633,7 +642,7 @@ export async function gerarPdfRecibo(
     ${rodapeHtml(empresa)}
   `
 
-  return renderizarHtmlParaPdf(html)
+  return renderizarHtmlParaPdf(html, corTextoDe(empresa))
 }
 
 // ---------------------------------------------------------------------------
