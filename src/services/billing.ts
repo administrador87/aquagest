@@ -8,7 +8,7 @@ import { invoicesService } from '@/services/invoices'
 import { financialTransactionsService } from '@/services/financialTransactions'
 import { gerarNumeroSequencial } from '@/services/numbering'
 import { registarAuditoria } from '@/services/auditLog'
-import { calcularFatura, calcularFaturaContadores, round2, type CalculoFaturaResultado } from '@/utils/calculations'
+import { calcularFatura, round2 } from '@/utils/calculations'
 import { removerUndefined } from '@/utils/firestoreSanitize'
 import type { Invoice, InvoiceMeterDetail, MeterReading } from '@/types/models'
 
@@ -32,8 +32,7 @@ async function obterPeriodoParaLeitura(leitura: MeterReading): Promise<{ inicio:
 
 /**
  * Gera uma fatura a partir de uma ou mais leituras por faturar do mesmo cliente, usando a tarifa
- * ativa. Com várias leituras (contadores diferentes), cada uma é calculada à parte pelos escalões
- * e os valores somam-se numa só fatura. A operação é atómica: cria a fatura, marca as leituras
+ * ativa. Com várias leituras (ex: troca de contador), os m³ somam-se e os escalões aplicam-se ao total. A operação é atómica: cria a fatura, marca as leituras
  * como faturadas, regista o movimento financeiro (débito) e atualiza o saldo do cliente numa
  * única escrita em lote.
  */
@@ -74,32 +73,25 @@ export async function gerarFaturaParaLeituras(
 
   const principal = leituras[0]
   const leituraUnica = leituras.length === 1
+  const consumoTotal = round2(leituras.reduce((soma, l) => soma + l.consumo, 0))
+
+  // Várias leituras do mesmo cliente (ex: troca de contador a meio do período): os m³ somam-se e
+  // os escalões da tarifa aplicam-se uma só vez ao total, como se fosse um único contador.
+  const { linhas, subtotal, impostoValor, total } = calcularFatura(consumoTotal, tarifa)
 
   let contadores: InvoiceMeterDetail[] | undefined
-  let calculo: CalculoFaturaResultado
-  if (leituraUnica) {
-    calculo = calcularFatura(principal.consumo, tarifa)
-  } else {
+  if (!leituraUnica) {
     const numeros = await Promise.all(
       leituras.map(async (l) => (await metersService.obter(l.contadorId))?.numero ?? l.contadorId),
     )
-    const porContador = calcularFaturaContadores(
-      leituras.map((l, i) => ({ rotulo: numeros[i], consumoM3: l.consumo })),
-      tarifa,
-    )
-    calculo = porContador
     contadores = leituras.map((l, i) => ({
       contadorId: l.contadorId,
       numeroContador: numeros[i],
       leituraAnterior: l.leituraAnterior,
       leituraAtual: l.leituraAtual,
       consumo: l.consumo,
-      valorConsumo: porContador.valoresConsumo[i],
     }))
   }
-  const { linhas, subtotal, impostoValor, total } = calculo
-
-  const consumoTotal = round2(leituras.reduce((soma, l) => soma + l.consumo, 0))
 
   const numero = await gerarNumeroSequencial('invoice', prefixoFatura)
   const agora = Date.now()

@@ -283,22 +283,23 @@ function caixaConsumoHtml(titulo: string, leituraAnterior: number, leituraAtual:
   `
 }
 
-/** Caixa de consumo para facturas que juntam vários contadores: uma linha por contador. */
+/** Caixa de consumo para facturas que juntam vários contadores (ex: troca de contador): uma linha
+ * por contador e o total de m³ a que se aplicam os escalões. */
 function caixaContadoresHtml(titulo: string, fatura: Invoice): string {
   const contadores = fatura.contadores ?? []
   return `
     <div class="box">
       <div class="box-title">${titulo}</div>
       <table class="historico">
-        <thead><tr><th>Contador</th><th class="num">Leit. Anterior</th><th class="num">Leit. Actual</th><th class="num">Consumo (m³)</th><th class="num">Valor (MT)</th></tr></thead>
+        <thead><tr><th>Contador</th><th class="num">Leit. Anterior</th><th class="num">Leit. Actual</th><th class="num">Consumo (m³)</th></tr></thead>
         <tbody>
           ${contadores
             .map(
               (c) =>
-                `<tr><td>${c.numeroContador}</td><td class="num">${formatNumber(c.leituraAnterior)}</td><td class="num">${formatNumber(c.leituraAtual)}</td><td class="num">${formatNumber(c.consumo)}</td><td class="num">${formatCurrency(c.valorConsumo)}</td></tr>`,
+                `<tr><td>${c.numeroContador}</td><td class="num">${formatNumber(c.leituraAnterior)}</td><td class="num">${formatNumber(c.leituraAtual)}</td><td class="num">${formatNumber(c.consumo)}</td></tr>`,
             )
             .join('')}
-          <tr class="divida-total" style="color:inherit;"><td colspan="3">TOTAL DO CONSUMO</td><td class="num">${formatNumber(fatura.consumo)}</td><td class="num">${formatCurrency(contadores.reduce((soma, c) => soma + c.valorConsumo, 0))}</td></tr>
+          <tr class="divida-total" style="color:inherit;"><td colspan="3">TOTAL DO CONSUMO</td><td class="num">${formatNumber(fatura.consumo)}</td></tr>
         </tbody>
       </table>
     </div>

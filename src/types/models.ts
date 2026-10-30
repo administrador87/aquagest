@@ -162,7 +162,6 @@ export interface InvoiceMeterDetail {
   leituraAnterior: number
   leituraAtual: number
   consumo: number
-  valorConsumo: number
 }
 
 export interface Invoice {

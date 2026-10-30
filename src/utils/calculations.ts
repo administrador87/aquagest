@@ -87,45 +87,6 @@ export function calcularFatura(
   return { linhas, subtotal, impostoValor, total }
 }
 
-export interface ConsumoDeContador {
-  rotulo: string
-  consumoM3: number
-}
-
-/**
- * Monta uma fatura que junta vários contadores do mesmo cliente: o consumo de cada contador é
- * calculado à parte pelos escalões da tarifa (cada contador começa no primeiro escalão) e os
- * valores somam-se. Taxa fixa, de manutenção e outras taxas são cobradas uma só vez por fatura.
- */
-export function calcularFaturaContadores(
-  contadores: ConsumoDeContador[],
-  tarifa: Pick<Tariff, 'escaloes' | 'taxaFixa' | 'taxaManutencao' | 'outrasTaxas' | 'impostoPercentagem'>,
-): CalculoFaturaResultado & { valoresConsumo: number[] } {
-  const linhas: InvoiceLine[] = []
-  const valoresConsumo: number[] = []
-
-  for (const { rotulo, consumoM3 } of contadores) {
-    const valorConsumo = calcularValorConsumoPorEscaloes(consumoM3, tarifa.escaloes)
-    valoresConsumo.push(valorConsumo)
-    linhas.push({
-      descricao: `Consumo de água — contador ${rotulo} (${round2(consumoM3)} m³)`,
-      quantidade: consumoM3,
-      valorUnitario: consumoM3 > 0 ? round2(valorConsumo / consumoM3) : 0,
-      total: valorConsumo,
-    })
-  }
-
-  // Taxas fixas: reaproveita calcularFatura com consumo 0 e descarta a linha de consumo.
-  const { linhas: linhasTaxas } = calcularFatura(0, tarifa)
-  linhas.push(...linhasTaxas.slice(1))
-
-  const subtotal = round2(linhas.reduce((soma, linha) => soma + linha.total, 0))
-  const impostoValor = round2(subtotal * ((tarifa.impostoPercentagem ?? 0) / 100))
-  const total = round2(subtotal + impostoValor)
-
-  return { linhas, subtotal, impostoValor, total, valoresConsumo }
-}
-
 export function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }

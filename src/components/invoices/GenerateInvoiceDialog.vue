@@ -97,8 +97,8 @@ async function gerar() {
         </div>
         <p class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
           <template v-if="leiturasSelecionadas.length > 1">
-            {{ leiturasSelecionadas.length }} leituras numa só factura ({{ consumoSelecionado.toFixed(2) }} m³ no total). Cada
-            contador é calculado à parte pelos escalões da tarifa e os valores somam-se; as taxas fixas cobram-se uma só vez.
+            {{ leiturasSelecionadas.length }} leituras numa só factura ({{ consumoSelecionado.toFixed(2) }} m³ no total). Os m³ somam-se
+            e o escalão da tarifa aplica-se uma só vez ao total (útil quando houve troca de contador).
           </template>
           <template v-else>Marque mais do que uma leitura para as juntar numa só factura.</template>
         </p>
