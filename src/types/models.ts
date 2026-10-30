@@ -155,6 +155,16 @@ export interface InvoiceLine {
   total: number
 }
 
+/** Detalhe de um contador numa fatura que junta leituras de vários contadores do mesmo cliente. */
+export interface InvoiceMeterDetail {
+  contadorId: string
+  numeroContador: string
+  leituraAnterior: number
+  leituraAtual: number
+  consumo: number
+  valorConsumo: number
+}
+
 export interface Invoice {
   id: string
   numero: string
@@ -162,6 +172,11 @@ export interface Invoice {
   periodoInicio: number
   periodoFim: number
   leituraId?: string
+  /** Todas as leituras faturadas (só presente quando a fatura junta mais do que uma leitura). */
+  leituraIds?: string[]
+  /** Detalhe por contador (só presente quando a fatura junta mais do que uma leitura). Nesse caso
+   * `consumo` é o total e `leituraAnterior`/`leituraAtual` são os do primeiro contador. */
+  contadores?: InvoiceMeterDetail[]
   leituraAnterior: number
   leituraAtual: number
   consumo: number

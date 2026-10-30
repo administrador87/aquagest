@@ -283,6 +283,35 @@ function caixaConsumoHtml(titulo: string, leituraAnterior: number, leituraAtual:
   `
 }
 
+/** Caixa de consumo para facturas que juntam vários contadores: uma linha por contador. */
+function caixaContadoresHtml(titulo: string, fatura: Invoice): string {
+  const contadores = fatura.contadores ?? []
+  return `
+    <div class="box">
+      <div class="box-title">${titulo}</div>
+      <table class="historico">
+        <thead><tr><th>Contador</th><th class="num">Leit. Anterior</th><th class="num">Leit. Actual</th><th class="num">Consumo (m³)</th><th class="num">Valor (MT)</th></tr></thead>
+        <tbody>
+          ${contadores
+            .map(
+              (c) =>
+                `<tr><td>${c.numeroContador}</td><td class="num">${formatNumber(c.leituraAnterior)}</td><td class="num">${formatNumber(c.leituraAtual)}</td><td class="num">${formatNumber(c.consumo)}</td><td class="num">${formatCurrency(c.valorConsumo)}</td></tr>`,
+            )
+            .join('')}
+          <tr class="divida-total" style="color:inherit;"><td colspan="3">TOTAL DO CONSUMO</td><td class="num">${formatNumber(fatura.consumo)}</td><td class="num">${formatCurrency(contadores.reduce((soma, c) => soma + c.valorConsumo, 0))}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `
+}
+
+/** Caixa de consumo adequada à factura: detalhe por contador se juntar vários, senão o normal. */
+function caixaConsumoDaFaturaHtml(titulo: string, fatura: Invoice, dias: number): string {
+  return (fatura.contadores?.length ?? 0) > 1
+    ? caixaContadoresHtml(titulo, fatura)
+    : caixaConsumoHtml(titulo, fatura.leituraAnterior, fatura.leituraAtual, fatura.consumo, fatura.periodoInicio, fatura.periodoFim, dias)
+}
+
 function tabelaItensHtml(linhas: { descricao: string; quantidade: number; valorUnitario: number; total: number }[]): string {
   return `
     <table class="itens">
@@ -379,7 +408,7 @@ function historicoHtml(historico: Invoice[]): string {
           ${historico
             .map(
               (f) =>
-                `<tr><td>${formatDate(f.periodoInicio)} a ${formatDate(f.periodoFim)}</td><td class="num">${formatNumber(f.leituraAnterior)}</td><td class="num">${formatNumber(f.leituraAtual)}</td><td class="num">${formatNumber(f.consumo)}</td><td class="num">${formatCurrency(f.total)}</td></tr>`,
+                `<tr><td>${formatDate(f.periodoInicio)} a ${formatDate(f.periodoFim)}</td><td class="num">${(f.contadores?.length ?? 0) > 1 ? '—' : formatNumber(f.leituraAnterior)}</td><td class="num">${(f.contadores?.length ?? 0) > 1 ? '—' : formatNumber(f.leituraAtual)}</td><td class="num">${formatNumber(f.consumo)}</td><td class="num">${formatCurrency(f.total)}</td></tr>`,
             )
             .join('')}
         </tbody>
@@ -535,7 +564,7 @@ export async function gerarPdfFatura(
         { icone: 'pin', label: 'Endereço/Bairro', valor: `${cliente.endereco}, ${cliente.bairro}` },
         { icone: 'telefone', label: 'Contacto', valor: cliente.telefone || '—' },
       ])}
-      ${caixaConsumoHtml('DETALHES DO CONSUMO', fatura.leituraAnterior, fatura.leituraAtual, fatura.consumo, fatura.periodoInicio, fatura.periodoFim, diasConsumo)}
+      ${caixaConsumoDaFaturaHtml('DETALHES DO CONSUMO', fatura, diasConsumo)}
     </div>
 
     ${tabelaItensHtml(fatura.linhas)}
@@ -625,15 +654,7 @@ export async function gerarPdfRecibo(
       ])}
       ${
         faturaPrincipal
-          ? caixaConsumoHtml(
-              'DETALHES DO CONSUMO (Factura)',
-              faturaPrincipal.leituraAnterior,
-              faturaPrincipal.leituraAtual,
-              faturaPrincipal.consumo,
-              faturaPrincipal.periodoInicio,
-              faturaPrincipal.periodoFim,
-              diasConsumo,
-            )
+          ? caixaConsumoDaFaturaHtml('DETALHES DO CONSUMO (Factura)', faturaPrincipal, diasConsumo)
           : caixaCamposHtml('FACTURA(S) ASSOCIADA(S)', numerosFatura.length ? numerosFatura.map((n) => ({ icone: 'cartao', label: 'Factura', valor: n })) : [{ icone: 'cartao', label: 'Factura', valor: '—' }])
       }
     </div>

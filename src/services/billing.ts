@@ -8,9 +8,9 @@ import { invoicesService } from '@/services/invoices'
 import { financialTransactionsService } from '@/services/financialTransactions'
 import { gerarNumeroSequencial } from '@/services/numbering'
 import { registarAuditoria } from '@/services/auditLog'
-import { calcularFatura, round2 } from '@/utils/calculations'
+import { calcularFatura, calcularFaturaContadores, round2, type CalculoFaturaResultado } from '@/utils/calculations'
 import { removerUndefined } from '@/utils/firestoreSanitize'
-import type { Invoice, MeterReading } from '@/types/models'
+import type { Invoice, InvoiceMeterDetail, MeterReading } from '@/types/models'
 
 interface AuthContext {
   uid: string
@@ -31,29 +31,75 @@ async function obterPeriodoParaLeitura(leitura: MeterReading): Promise<{ inicio:
 }
 
 /**
- * Gera uma fatura a partir de uma leitura por faturar, usando a tarifa ativa. A operação é
- * atómica: cria a fatura, marca a leitura como faturada, regista o movimento financeiro (débito)
- * e atualiza o saldo do cliente numa única escrita em lote.
+ * Gera uma fatura a partir de uma ou mais leituras por faturar do mesmo cliente, usando a tarifa
+ * ativa. Com várias leituras (contadores diferentes), cada uma é calculada à parte pelos escalões
+ * e os valores somam-se numa só fatura. A operação é atómica: cria a fatura, marca as leituras
+ * como faturadas, regista o movimento financeiro (débito) e atualiza o saldo do cliente numa
+ * única escrita em lote.
  */
-export async function gerarFaturaParaLeitura(
-  leituraId: string,
+export async function gerarFaturaParaLeituras(
+  leituraIds: string[],
   autor: AuthContext,
   diasVencimento: number,
   prefixoFatura: string,
 ): Promise<string> {
-  const leitura = await meterReadingsService.obter(leituraId)
-  if (!leitura) throw new Error('Leitura não encontrada.')
-  if (leitura.faturada) throw new Error('Esta leitura já foi faturada.')
-  if (!leitura.clienteId) throw new Error('Esta leitura é do contador da fonte e não pode ser faturada.')
+  const idsUnicos = [...new Set(leituraIds)]
+  if (idsUnicos.length === 0) throw new Error('Selecione pelo menos uma leitura.')
 
-  const cliente = await customersService.obter(leitura.clienteId)
+  const leituras: MeterReading[] = []
+  for (const id of idsUnicos) {
+    const leitura = await meterReadingsService.obter(id)
+    if (!leitura) throw new Error('Leitura não encontrada.')
+    if (leitura.faturada) throw new Error('Uma das leituras já foi faturada.')
+    if (!leitura.clienteId) throw new Error('Esta leitura é do contador da fonte e não pode ser faturada.')
+    leituras.push(leitura)
+  }
+
+  const clienteId = leituras[0].clienteId!
+  if (leituras.some((l) => l.clienteId !== clienteId)) {
+    throw new Error('Só é possível juntar leituras do mesmo cliente na mesma fatura.')
+  }
+
+  const cliente = await customersService.obter(clienteId)
   if (!cliente) throw new Error('Cliente não encontrado.')
 
   const tarifa = await obterTarifaAtiva()
   if (!tarifa) throw new Error('Não existe nenhuma tarifa ativa. Configure uma tarifa antes de faturar.')
 
-  const periodo = await obterPeriodoParaLeitura(leitura)
-  const { linhas, subtotal, impostoValor, total } = calcularFatura(leitura.consumo, tarifa)
+  const periodos = await Promise.all(leituras.map((l) => obterPeriodoParaLeitura(l)))
+  const periodo = {
+    inicio: Math.min(...periodos.map((p) => p.inicio)),
+    fim: Math.max(...periodos.map((p) => p.fim)),
+  }
+
+  const principal = leituras[0]
+  const leituraUnica = leituras.length === 1
+
+  let contadores: InvoiceMeterDetail[] | undefined
+  let calculo: CalculoFaturaResultado
+  if (leituraUnica) {
+    calculo = calcularFatura(principal.consumo, tarifa)
+  } else {
+    const numeros = await Promise.all(
+      leituras.map(async (l) => (await metersService.obter(l.contadorId))?.numero ?? l.contadorId),
+    )
+    const porContador = calcularFaturaContadores(
+      leituras.map((l, i) => ({ rotulo: numeros[i], consumoM3: l.consumo })),
+      tarifa,
+    )
+    calculo = porContador
+    contadores = leituras.map((l, i) => ({
+      contadorId: l.contadorId,
+      numeroContador: numeros[i],
+      leituraAnterior: l.leituraAnterior,
+      leituraAtual: l.leituraAtual,
+      consumo: l.consumo,
+      valorConsumo: porContador.valoresConsumo[i],
+    }))
+  }
+  const { linhas, subtotal, impostoValor, total } = calculo
+
+  const consumoTotal = round2(leituras.reduce((soma, l) => soma + l.consumo, 0))
 
   const numero = await gerarNumeroSequencial('invoice', prefixoFatura)
   const agora = Date.now()
@@ -64,13 +110,15 @@ export async function gerarFaturaParaLeitura(
 
   const invoiceData: Omit<Invoice, 'id'> = {
     numero,
-    clienteId: leitura.clienteId,
+    clienteId,
     periodoInicio: periodo.inicio,
     periodoFim: periodo.fim,
-    leituraId: leitura.id,
-    leituraAnterior: leitura.leituraAnterior,
-    leituraAtual: leitura.leituraAtual,
-    consumo: leitura.consumo,
+    leituraId: principal.id,
+    leituraIds: leituraUnica ? undefined : leituras.map((l) => l.id),
+    contadores,
+    leituraAnterior: principal.leituraAnterior,
+    leituraAtual: principal.leituraAtual,
+    consumo: consumoTotal,
     tarifaId: tarifa.id,
     tarifaSnapshot: {
       escaloes: tarifa.escaloes,
@@ -94,11 +142,13 @@ export async function gerarFaturaParaLeitura(
 
   const batch = writeBatch(db)
   batch.set(invoiceRef, removerUndefined(invoiceData))
-  batch.update(doc(db, 'meterReadings', leitura.id), { faturada: true, atualizadoEm: agora })
+  for (const leitura of leituras) {
+    batch.update(doc(db, 'meterReadings', leitura.id), { faturada: true, atualizadoEm: agora })
+  }
   batch.set(
     ftRef,
     removerUndefined({
-      clienteId: leitura.clienteId,
+      clienteId,
       tipo: 'debito',
       origem: 'fatura',
       origemId: invoiceRef.id,
@@ -109,7 +159,7 @@ export async function gerarFaturaParaLeitura(
       criadoEm: agora,
     }),
   )
-  batch.update(doc(db, 'customers', leitura.clienteId), { saldoAtual: novoSaldo, atualizadoEm: agora })
+  batch.update(doc(db, 'customers', clienteId), { saldoAtual: novoSaldo, atualizadoEm: agora })
 
   await batch.commit()
 
@@ -123,6 +173,16 @@ export async function gerarFaturaParaLeitura(
   })
 
   return invoiceRef.id
+}
+
+/** Fatura uma única leitura (caso mais comum, e faturação em massa). */
+export function gerarFaturaParaLeitura(
+  leituraId: string,
+  autor: AuthContext,
+  diasVencimento: number,
+  prefixoFatura: string,
+): Promise<string> {
+  return gerarFaturaParaLeituras([leituraId], autor, diasVencimento, prefixoFatura)
 }
 
 /** Lista as leituras ainda não faturadas (usadas para faturação individual ou em massa). */
@@ -173,8 +233,9 @@ export async function cancelarFatura(faturaId: string, autor: AuthContext): Prom
   const batch = writeBatch(db)
   batch.update(doc(db, 'invoices', faturaId), { estado: 'cancelada', atualizadoEm: agora })
   batch.update(doc(db, 'customers', dados.clienteId), { saldoAtual: novoSaldo, atualizadoEm: agora })
-  if (dados.leituraId) {
-    batch.update(doc(db, 'meterReadings', dados.leituraId), { faturada: false, atualizadoEm: agora })
+  const leituraIds = dados.leituraIds ?? (dados.leituraId ? [dados.leituraId] : [])
+  for (const leituraId of leituraIds) {
+    batch.update(doc(db, 'meterReadings', leituraId), { faturada: false, atualizadoEm: agora })
   }
   await batch.commit()
 

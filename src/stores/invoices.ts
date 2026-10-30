@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import type { Unsubscribe } from 'firebase/firestore'
 import { invoicesService } from '@/services/invoices'
-import { cancelarFatura, gerarFaturaParaLeitura, gerarFaturasEmMassa, listarLeiturasPorFaturar } from '@/services/billing'
+import {
+  cancelarFatura,
+  gerarFaturaParaLeitura,
+  gerarFaturaParaLeituras,
+  gerarFaturasEmMassa,
+  listarLeiturasPorFaturar,
+} from '@/services/billing'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { useSyncStore } from '@/stores/sync'
@@ -50,6 +56,12 @@ export const useInvoicesStore = defineStore('invoices', {
       const auth = useAuthStore()
       const settings = useSettingsStore()
       return gerarFaturaParaLeitura(leituraId, auth.contexto, settings.dados.diasVencimentoFatura, settings.dados.prefixoFatura)
+    },
+
+    async gerarDeLeituras(leituraIds: string[]) {
+      const auth = useAuthStore()
+      const settings = useSettingsStore()
+      return gerarFaturaParaLeituras(leituraIds, auth.contexto, settings.dados.diasVencimentoFatura, settings.dados.prefixoFatura)
     },
 
     async gerarEmMassa(leituraIds: string[]) {
